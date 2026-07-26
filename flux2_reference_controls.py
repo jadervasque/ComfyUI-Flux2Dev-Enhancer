@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import gc
-
 import torch
 import torch.nn.functional as F
 
@@ -78,8 +76,7 @@ class Flux2ReferenceAttentionControl:
                 "model": ("MODEL",),
                 "conditioning": ("CONDITIONING",),
                 "strength": (
-                    "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
+                    "FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}
                 ),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
             },
@@ -89,8 +86,7 @@ class Flux2ReferenceAttentionControl:
                     {"default": "none"},
                 ),
                 "spatial_fade_strength": (
-                    "FLOAT",
-                    {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05},
+                    "FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}
                 ),
                 "debug": ("BOOLEAN", {"default": False}),
             },
@@ -110,8 +106,10 @@ class Flux2ReferenceAttentionControl:
         spatial_fade_strength=0.5,
         debug=False,
     ):
-        require_capabilities(model, attn_input=True)
         patched = model.clone()
+        if float(strength) == 1.0 and spatial_fade == "none":
+            return patched, conditioning
+        require_capabilities(model, attn_input=True)
         reference_latent = _find_reference_latent(conditioning, reference_index)
 
         def attention_patch(q, k, v, extra_options=None, **kwargs):
@@ -154,8 +152,7 @@ class Flux2ReferenceWeight:
                 "model": ("MODEL",),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
                 "weight": (
-                    "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
+                    "FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}
                 ),
             }
         }
@@ -165,8 +162,10 @@ class Flux2ReferenceWeight:
     CATEGORY = "conditioning/flux2"
 
     def apply(self, model, reference_index=0, weight=1.0):
-        require_capabilities(model, attn_input=True)
         patched = model.clone()
+        if float(weight) == 1.0:
+            return (patched,)
+        require_capabilities(model, attn_input=True)
 
         def attention_patch(q, k, v, extra_options=None, **kwargs):
             options = extra_options or kwargs.get("extra_options") or {}
@@ -195,8 +194,7 @@ class Flux2TextReferenceBalance:
                 "model": ("MODEL",),
                 "conditioning": ("CONDITIONING",),
                 "balance": (
-                    "FLOAT",
-                    {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001},
+                    "FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}
                 ),
             },
             "optional": {"debug": ("BOOLEAN", {"default": False})},
@@ -207,8 +205,10 @@ class Flux2TextReferenceBalance:
     CATEGORY = "conditioning/flux2"
 
     def balance(self, model, conditioning, balance=0.5, debug=False):
-        require_capabilities(model, attn_input=True)
         patched = model.clone()
+        if float(balance) == 0.5:
+            return patched, conditioning
+        require_capabilities(model, attn_input=True)
         if balance <= 0.5:
             text_scale, reference_scale = balance * 2.0, 1.0
         else:
@@ -245,8 +245,7 @@ class Flux2ReferenceLatentMask:
             "required": {"conditioning": ("CONDITIONING",), "mask": ("MASK",)},
             "optional": {
                 "strength": (
-                    "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05},
+                    "FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05}
                 ),
                 "invert_mask": ("BOOLEAN", {"default": False}),
                 "feather": ("INT", {"default": 0, "min": 0, "max": 64}),
@@ -319,7 +318,6 @@ class Flux2ReferenceLatentMask:
                     f"[Flux2ReferenceLatentMask] reference={reference_index} "
                     f"shape={tuple(reference.shape)} strength={strength} feather={feather}"
                 )
-        gc.collect()
         return (output,)
 
 
