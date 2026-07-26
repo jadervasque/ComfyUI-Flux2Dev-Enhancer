@@ -5,8 +5,8 @@ version = "4.0.0"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 authors = [
-    { name = "capitan01R", role = "Original project author" },
-    { name = "Jader Vasque", role = "Multi-variant fork maintainer" },
+    { name = "capitan01R" },
+    { name = "Jader Vasque" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
