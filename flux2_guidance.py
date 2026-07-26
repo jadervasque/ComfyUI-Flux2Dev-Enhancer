@@ -55,8 +55,7 @@ def _progress(values, sigma: float, state: dict) -> tuple[float, int]:
     sigma_progress = (
         (maximum - sigma) / maximum if maximum and maximum > 1e-8 else 0.0
     )
-    step_progress = 1.0 - 0.5 ** (step + 1)
-    return min(max(max(sigma_progress, step_progress), 0.0), 1.0), step
+    return min(max(sigma_progress, 0.0), 1.0), step
 
 
 class Flux2ColorAnchor:
@@ -142,7 +141,10 @@ class Flux2ColorAnchor:
                 raise ValueError(
                     "FLUX.2 Color Anchor: generated and reference latent channel counts differ."
                 )
-            effective = float(strength) * progress ** (1.0 / curve)
+            # Color statistics benefit from an early ramp in very short schedules,
+            # while the reported progress remains sigma-correct for window gating.
+            color_progress = max(progress, 1.0 - 0.5 ** (step + 1))
+            effective = float(strength) * color_progress ** (1.0 / curve)
             reference_mean = ref_mean.to(denoised.device, denoised.dtype)
             current_mean = denoised.mean(dim=(-2, -1), keepdim=True)
             correction = reference_mean - current_mean
@@ -209,7 +211,9 @@ class Flux2IdentityGuidance:
         if strength <= 0.0:
             return (model,)
         reference = (
-            identity_latent.get("samples") if isinstance(identity_latent, dict) else None
+            identity_latent.get("samples")
+            if isinstance(identity_latent, dict)
+            else None
         )
         if not torch.is_tensor(reference) or reference.dim() != 4:
             raise ValueError(
@@ -246,9 +250,9 @@ class Flux2IdentityGuidance:
                 ref_mean = ref.mean(dim=(-2, -1), keepdim=True)
                 ref_std = ref.std(dim=(-2, -1), keepdim=True).clamp(min=1e-5)
                 current_mean = denoised.mean(dim=(-2, -1), keepdim=True)
-                current_std = denoised.std(dim=(-2, -1), keepdim=True).clamp(
-                    min=1e-5
-                )
+                current_std = denoised.std(
+                    dim=(-2, -1), keepdim=True
+                ).clamp(min=1e-5)
                 matched = (
                     (denoised - current_mean) / current_std * ref_std + ref_mean
                 )
