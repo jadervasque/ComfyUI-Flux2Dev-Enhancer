@@ -77,8 +77,7 @@ class Flux2ColorAnchor:
                 ),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
                 "channel_weights": (
-                    ["uniform", "by_variance"],
-                    {"default": "uniform"},
+                    ["uniform", "by_variance"], {"default": "uniform"}
                 ),
                 "start_percent": (
                     "FLOAT",
@@ -110,9 +109,9 @@ class Flux2ColorAnchor:
         sigmas=None,
         debug=False,
     ):
-        require_capabilities(model, sampler_post_cfg=True)
         if strength <= 0.0:
             return (model,)
+        require_capabilities(model, sampler_post_cfg=True)
         reference = _reference_from_conditioning(conditioning, int(reference_index))
         if not torch.is_tensor(reference) or reference.dim() != 4:
             raise ValueError(
@@ -158,7 +157,11 @@ class Flux2ColorAnchor:
             return denoised + correction * effective
 
         patched = model.clone()
-        patched.model_options.setdefault("sampler_post_cfg_function", []).append(callback)
+        callbacks = list(
+            patched.model_options.get("sampler_post_cfg_function", []) or []
+        )
+        callbacks.append(callback)
+        patched.model_options["sampler_post_cfg_function"] = callbacks
         return (patched,)
 
 
@@ -207,9 +210,9 @@ class Flux2IdentityGuidance:
         sigmas=None,
         debug=False,
     ):
-        require_capabilities(model, sampler_post_cfg=True)
         if strength <= 0.0:
             return (model,)
+        require_capabilities(model, sampler_post_cfg=True)
         reference = (
             identity_latent.get("samples")
             if isinstance(identity_latent, dict)
@@ -273,7 +276,11 @@ class Flux2IdentityGuidance:
             return output
 
         patched = model.clone()
-        patched.model_options.setdefault("sampler_post_cfg_function", []).append(callback)
+        callbacks = list(
+            patched.model_options.get("sampler_post_cfg_function", []) or []
+        )
+        callbacks.append(callback)
+        patched.model_options["sampler_post_cfg_function"] = callbacks
         return (patched,)
 
 
@@ -296,8 +303,7 @@ class LegacyFlux2KleinColorAnchor:
                 ),
                 "ref_index": ("INT", {"default": 0, "min": 0, "max": 63}),
                 "channel_weights": (
-                    ["uniform", "by_variance"],
-                    {"default": "uniform"},
+                    ["uniform", "by_variance"], {"default": "uniform"}
                 ),
                 "debug": ("BOOLEAN", {"default": False}),
             },
