@@ -1,117 +1,84 @@
-# Example workflows
+# Maintained example workflows
 
-This directory contains two generations of workflows.
+This directory contains the supported workflow examples for **ComfyUI-Flux2Dev-Enhancer**.
 
-## Recommended FLUX.2 workflows
-
-These workflows use the model-neutral node IDs under `conditioning/flux2` and
-require only ComfyUI core nodes plus this extension.
-
-| File | Model/profile | Demonstrates |
+| File | Default profile | Demonstrates |
 |---|---|---|
-| `FLUX2_dev_single_reference_identity.json` | FLUX.2 dev | One identity reference, VAE encoding, `Flux2MultiReferenceLatent`, sigma-aware `Flux2IdentityFeatureTransfer`, and standard ComfyUI sampling. |
-| `FLUX2_klein_single_reference_identity.json` | FLUX.2 Klein 9B distilled | The same architecture-aware path with a four-step Klein profile. Change the checkpoint and Qwen encoder for Klein 4B or base variants. |
-| `FLUX2_multi_reference_masked_identity.json` | FLUX.2 dev by default | Two references in stable order, one mask per reference, late-start transfer, `zero_unmasked_tokens`, and a smaller query chunk for VRAM control. |
-| `FLUX2_reference_attention_controls.json` | FLUX.2 dev by default | `Flux2ReferenceAttentionControl`, `Flux2TextReferenceBalance`, and conservative identity transfer in one ordered chain. |
+| `FLUX2_dev_single_reference_identity.json` | FLUX.2 dev | One identity reference, VAE encoding, sigma-aware Identity Feature Transfer, and standard ComfyUI sampling. |
+| `FLUX2_klein_single_reference_identity.json` | FLUX.2 Klein 9B distilled | The same architecture-aware identity path with a four-step Klein profile. |
+| `FLUX2_multi_reference_masked_identity.json` | FLUX.2 dev | Two ordered references, one mask per reference, late-start transfer, source masking, and lower query chunk size. |
+| `FLUX2_reference_attention_controls.json` | FLUX.2 dev | Multi Reference Latent, Reference Attention Control, Text/Reference Balance, and Identity Feature Transfer in one chain. |
 
-All model and image filenames are editable placeholders. After importing a
-workflow, select the files installed in your local ComfyUI directories.
+All model and image filenames are editable placeholders. Select the files available in your local ComfyUI installation after importing a workflow.
 
-## Visual organization
+## Visual structure
 
-Every recommended workflow follows the same left-to-right structure:
+Every maintained workflow uses four left-to-right groups:
 
 1. **Model and prompt**
 2. **Reference preparation**
-3. **ComfyUI FLUX.2 Enhancer nodes**
+3. **ComfyUI-Flux2Dev-Enhancer nodes**
 4. **Sampling and output**
 
-The sections are represented by labeled ComfyUI groups. Nodes use a consistent
-grid with clear horizontal flow, and the graphs are saved at a scale that exposes
-the complete pipeline on first import.
+Executable nodes are positioned on a consistent grid without overlap. Each project node demonstrated has an adjacent native ComfyUI `MarkdownNote` in English.
 
-No executable nodes overlap.
+The Markdown Notes document:
 
-## Embedded Markdown documentation
-
-Every `ComfyUI-Flux2Dev-Enhancer` node used in a recommended workflow has an
-adjacent native ComfyUI `MarkdownNote`.
-
-The notes are written in English and document:
-
-- what the node changes internally;
-- where it belongs in the model or conditioning path;
+- internal implementation role;
+- correct position in the graph;
 - neutral values and important controls;
-- reference/mask ordering;
+- reference and mask order;
 - denoising and sigma behavior;
 - VRAM implications;
-- limitations such as pose or background transfer.
+- limitations such as pose, composition, or background transfer.
 
-The Markdown Notes are documentation only. They have no inputs, outputs, or
-execution effect.
+Markdown Notes have no inputs or outputs and do not affect execution.
 
-## Suggested model substitutions
+## Model substitutions
 
-- FLUX.2 dev: `flux2-dev.safetensors` plus a compatible Mistral FLUX.2 text encoder.
-- Klein 9B: `flux-2-klein-9b.safetensors` plus a Qwen3 8B FLUX.2 text encoder.
-- Klein 4B: use the Klein 4B checkpoint and matching Qwen3 4B encoder; the generic
-  nodes detect five double blocks and twenty single blocks automatically.
-- Base Klein: increase scheduler steps according to the checkpoint guidance rather
-  than using the distilled four-step default.
-- FP8 or GGUF: change the loader only when it preserves ComfyUI attention-patch
-  APIs and reference metadata.
+- **FLUX.2 dev:** use a compatible dev checkpoint, Mistral FLUX.2 text encoder, and FLUX.2 VAE.
+- **Klein 9B distilled:** the maintained example uses a Qwen3 8B encoder and four-step scheduler profile.
+- **Klein 4B:** replace the checkpoint and use the matching Qwen3 4B encoder. Architecture-aware nodes detect its block counts automatically.
+- **Base Klein variants:** increase scheduler steps according to the model guidance instead of retaining the distilled four-step profile.
+- **BF16, FP8, GGUF, or KV loaders:** the loader must preserve ComfyUI attention-patch interfaces and reference metadata. Use Architecture Inspector before debugging node behavior.
 
-## Mask inputs
-
-The examples connect the `MASK` output of `LoadImage` for convenience. Use an
-image with alpha or replace it with your preferred mask-generation node.
-
-Reference and mask order must match:
+## Reference and mask order
 
 ```text
 latent_1 <-> subject_mask_1
 latent_2 <-> subject_mask_2
 ...
+latent_8 <-> subject_mask_8
 ```
 
-## Node order
+The examples connect the `MASK` output of `LoadImage` for convenience. Use alpha-aware images or replace those links with dedicated mask-generation nodes.
+
+## Recommended node order
 
 ```text
-MODEL:        loader -> optional LoRAs -> reference controls -> identity transfer -> guider/sampler
-CONDITIONING: text encode -> multi reference latent -> optional reference controls -> guider/sampler
-REFERENCES:   image -> scale/crop -> FLUX.2 VAE encode -> latent_N
+MODEL:
+loader -> optional LoRAs -> reference controls -> identity transfer -> guider/sampler
+
+CONDITIONING:
+text encode -> optional conditioning tools -> multi reference latent
+-> optional reference controls -> guider/sampler
+
+REFERENCES:
+image -> scale/crop -> FLUX.2 VAE encode -> latent_N
 ```
 
-The standard ComfyUI sampler stack remains the recommended path. The historical
-direct Klein sampler is not used by the new examples.
-
-## Historical legacy workflows
-
-The remaining JSON files were inherited from the upstream Klein-specific project.
-They are retained to verify backward compatibility and may contain IDs displayed
-with `(Legacy)`, including:
-
-- `IdentityFeatureTransferFinal`
-- `Flux2KleinMultiReferenceLatent`
-- `Flux2KleinColorAnchor`
-- `IdentityFeatureTransferV3`
-- `Flux2KleinKSamplerExperimental`
-
-Use the four `FLUX2_*.json` workflows for new projects. Legacy files are not the
-reference implementation for FLUX.2 dev or Klein 4B.
+Use the standard ComfyUI sampler stack. The standalone project does not include a direct experimental sampler.
 
 ## Validation
 
-`tests/test_example_workflows.py` validates graph schema, links, model profiles,
-multireference wiring, and control order.
+The repository tests verify:
 
-`tests/test_workflow_layout_and_readmes.py` additionally verifies:
+- JSON parsing;
+- link and socket consistency;
+- canonical project node IDs;
+- dev, Klein, multi-reference, and attention-control profiles;
+- one Markdown Note per demonstrated project node;
+- four ordered visual groups;
+- absence of overlapping nodes.
 
-- one Markdown Note for every Enhancer node used;
-- note content and native `MarkdownNote` schema;
-- non-overlapping node rectangles;
-- the four visual workflow groups;
-- localized README files and reciprocal language links.
-
-These tests validate structure and documentation, not image quality. Visual
-validation still requires actual checkpoints, local images, and a GPU runtime.
+These checks validate graph structure, not visual quality. Runtime validation still requires the referenced checkpoints, local images, and a compatible GPU environment.

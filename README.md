@@ -4,57 +4,36 @@
 
 </div>
 
-# ComfyUI FLUX.2 Enhancer
+# ComfyUI-Flux2Dev-Enhancer
 
-Architecture-aware conditioning, reference-latent, identity-transfer, color-control,
-and guidance nodes for the open-weight FLUX.2 family in ComfyUI.
+Architecture-aware conditioning, reference, identity-transfer, and latent-guidance nodes for the open-weight FLUX.2 family in ComfyUI.
 
-This project is an independent fork of
-[`capitan01R/ComfyUI-Flux2Klein-Enhancer`](https://github.com/capitan01R/ComfyUI-Flux2Klein-Enhancer).
-The original project and algorithms were created by **capitan01R**. This fork
-preserves the upstream MIT notice and generalizes the extension beyond a fixed
-Klein 9B architecture.
+> **Status:** `1.0.0b1` standalone beta. The public API contains only the canonical nodes documented in [`docs/NODE_REFERENCE.md`](docs/NODE_REFERENCE.md). Historical node IDs and compatibility aliases are intentionally not included.
 
-> [!IMPORTANT]
-> FLUX.2 model licenses are separate from this extension's MIT license. “Open
-> weight” does not imply that every checkpoint permits the same commercial use.
-> Review the license attached to the exact model you load.
+## Highlights
 
-## Status
+- Runtime detection for FLUX.2 dev, Klein 4B, and Klein 9B transformer profiles.
+- Identity Feature Transfer with architecture-aware schedules, masks, denoising windows, sigma scaling, and chunked matching.
+- Single- and multi-reference latent conditioning.
+- Reference attention weighting and text/reference balance.
+- Conditioning enhancement and tokenizer-aware prompt sections.
+- Post-CFG color anchoring and latent identity guidance.
+- Architecture Inspector for loader and quantization diagnostics.
+- Maintained, visually organized workflows with embedded English Markdown Notes.
+- Automated tests and GitHub Actions CI for Python 3.10–3.12.
 
-Version: **4.0.0 beta**
+## Supported profiles
 
-The extension performs runtime architecture and loader-capability detection. It
-does not decide compatibility from checkpoint filenames.
+| Profile | Architecture detection | Canonical nodes | Validation status |
+|---|---:|---:|---|
+| FLUX.2 dev | Implemented | Implemented | Broader GPU validation in progress |
+| FLUX.2 Klein 4B | Implemented | Implemented | Broader GPU validation in progress |
+| FLUX.2 Klein 9B | Implemented | Implemented | Architecture and code paths covered |
+| KV-cache variants | Architecture-compatible | Loader-dependent | Requires a compatible KV loader |
+| BF16 / FP8 repacks | Architecture-compatible | Loader-dependent | Test the exact loader |
+| GGUF repacks | Architecture-compatible | Loader-dependent | Test the exact loader |
 
-| Model family | Architecture detection | Generic nodes | Preset state | Runtime image validation |
-|---|---:|---:|---|---|
-| FLUX.2 [dev] | Implemented | Implemented | Conservative automatic presets | Pending broader GPU validation |
-| FLUX.2 [klein] 4B distilled | Implemented | Implemented | Automatic presets | Pending broader GPU validation |
-| FLUX.2 [klein] 4B base | Implemented | Implemented | Automatic presets | Pending broader GPU validation |
-| FLUX.2 [klein] 9B distilled | Implemented | Implemented | Automatic and legacy presets | Existing upstream behavior plus new code paths |
-| FLUX.2 [klein] 9B base | Implemented | Implemented | Automatic and legacy presets | Pending broader GPU validation |
-| FLUX.2 [klein] 9B KV | Architecture-compatible | Loader-dependent | Conservative | Requires KV-loader testing |
-| BF16 / FP8 repacks | Architecture-compatible | Loader-dependent | Same architecture profile | Test the specific loader |
-| GGUF repacks | Architecture-compatible | Loader-dependent | Same architecture profile | Test the specific loader |
-
-“Loader-dependent” means the loader must preserve ComfyUI's model-patching APIs
-and runtime transformer metadata. Use **FLUX.2 Architecture Inspector** to check
-the loaded model.
-
-## Why architecture detection matters
-
-The official FLUX.2 variants do not have the same transformer depth:
-
-| Profile | Hidden width | Attention heads | Double blocks | Single blocks | Text-conditioning width |
-|---|---:|---:|---:|---:|---:|
-| FLUX.2 [dev] | 6144 | 48 | 8 | 48 | 15360 |
-| FLUX.2 [klein] 9B | 4096 | 32 | 8 | 24 | 12288 |
-| FLUX.2 [klein] 4B | 3072 | 24 | 5 | 20 | 7680 |
-
-A schedule calibrated for Klein 9B cannot be copied unchanged to dev or Klein 4B.
-The extension reads the actual block lists, validates custom schedules against
-them, and projects legacy schedules by relative depth.
+Loader-dependent means the loader must preserve the ComfyUI model-patch interfaces and runtime metadata described in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Installation
 
@@ -65,27 +44,13 @@ git clone https://github.com/jadervasque/ComfyUI-Flux2Dev-Enhancer.git
 
 Restart ComfyUI after installing or updating.
 
-No additional runtime packages are required beyond dependencies already used by
-ComfyUI. Development tests require `pytest`.
+No additional runtime package is required beyond the dependencies normally provided by ComfyUI. Development dependencies are optional:
 
-## Example workflows
+```bash
+python -m pip install -e ".[dev]"
+```
 
-Recommended workflows are stored in [`example_workflow`](example_workflow):
-
-- `FLUX2_dev_single_reference_identity.json`
-- `FLUX2_klein_single_reference_identity.json`
-- `FLUX2_multi_reference_masked_identity.json`
-- `FLUX2_reference_attention_controls.json`
-
-The recommended graphs are visually separated into model/prompt, reference
-preparation, Enhancer nodes, and sampling/output sections. Every Enhancer node
-used in a graph has an adjacent native **Markdown Note** explaining its role,
-placement, runtime behavior, and important controls in English.
-
-Inherited Klein-specific workflows remain available as legacy compatibility
-fixtures. See [`example_workflow/README.md`](example_workflow/README.md).
-
-## Recommended node order
+## Recommended workflow order
 
 ### Model path
 
@@ -94,127 +59,42 @@ Load Diffusion Model
         ↓
 Apply LoRA(s), when used
         ↓
-FLUX.2 reference/model controls, when used
+Reference controls, when used
         ↓
 FLUX.2 Identity Feature Transfer
         ↓
 Guider / KSampler / SamplerCustom
 ```
 
-### Conditioning and reference path
+### Conditioning path
 
 ```text
 FLUX.2 text encoder
         ↓
 Prompt conditioning
         ↓
+Optional conditioning tools
+        ↓
 FLUX.2 Multi Reference Latent
         ↓
-Optional reference conditioning controls
+Optional reference controls
         ↓
-Sampler positive conditioning
-
-Reference image 1 → FLUX.2 VAE Encode → latent_1
-Reference image 2 → FLUX.2 VAE Encode → latent_2
-...
+Positive conditioning input
 ```
 
-### Output path
+### Reference path
 
 ```text
-Empty FLUX.2 Latent or encoded source image
+Reference image
         ↓
-Sampler
+Scale or crop
         ↓
-FLUX.2 VAE Decode
+FLUX.2 VAE Encode
         ↓
-Image
+latent_1 ... latent_8
 ```
 
-The output canvas is controlled by the latent supplied to the sampler. Reference
-image dimensions do not automatically set output dimensions.
-
-## Model-neutral nodes
-
-| Node | Purpose |
-|---|---|
-| **FLUX.2 Architecture Inspector** | Reports detected variant, block counts, conditioning width, guidance support, reference method, and loader hook capabilities. |
-| **FLUX.2 Identity Feature Transfer** | Pulls generated attention features toward matching reference features using architecture-aware schedules and masks. |
-| **FLUX.2 Multi Reference Latent** | Adds up to eight VAE-encoded references with explicit placement and append/replace behavior. |
-| **FLUX.2 Reference Attention Control** | Scales one reference's attention keys and values, optionally with a spatial fade. |
-| **FLUX.2 Reference Weight** | Lightweight model-only multiplier for one reference's keys and values. |
-| **FLUX.2 Text/Reference Balance** | Attenuates text or reference attention around a neutral midpoint. |
-| **FLUX.2 Reference Latent Mask** | Attenuates black regions directly in one encoded reference latent. |
-| **FLUX.2 Conditioning Enhancer** | Scales, whitens, equalizes, and optionally adjusts the three stacked encoder-layer slices. |
-| **FLUX.2 Text Conditioning Enhancer** | Simpler magnitude, contrast, and token-norm controls. |
-| **FLUX.2 Sectioned Encoder** | Encodes FRONT/MID/END prompt sections and records tokenizer-derived ranges when available. |
-| **FLUX.2 Detail Controller** | Scales section ranges or explicit token ranges. |
-| **FLUX.2 Color Anchor** | Corrects per-channel latent color statistics toward a selected reference. |
-| **FLUX.2 Identity Guidance** | Applies a post-CFG latent correction toward an identity latent. |
-
-## FLUX.2 Identity Feature Transfer
-
-The node patches attention output during denoising. For each active transformer
-block it:
-
-1. Reads `reference_image_num_tokens`, `img_slice`, `block_type`, and
-   `block_index` from ComfyUI.
-2. Separates text, generated-image, and reference-image tokens.
-3. Builds a reference bank from selected references and masks.
-4. Centers and normalizes generated and reference features.
-5. Computes cosine similarity between generated and reference tokens.
-6. Rejects matches below `similarity_floor`.
-7. Pools reference features using temperature-controlled softmax weights.
-8. Applies confidence-gated feature transfer to generated-image tokens.
-9. Returns the modified attention output to the remaining transformer layers.
-
-It does not copy pixels and it is not a face-swap postprocessor. Identity, pose,
-lighting, hair, clothing, and background remain entangled in model features.
-
-### Presets
-
-| Preset | Intended use |
-|---|---|
-| `AUTO_SOFT` | Preserve some likeness while allowing substantial prompt and composition freedom. |
-| `AUTO_BALANCED` | General starting point for identity-preserving edits. |
-| `AUTO_STRONG` | Strong lock; use masks and inspect unwanted pose/background transfer. |
-| `KLEIN_LEGACY_HARD` | Original hard schedule projected to the loaded architecture. |
-| `KLEIN_LEGACY_MID` | Original medium similarity settings with projected depth. |
-| `KLEIN_LEGACY_SOFT` | Original selective settings with projected depth. |
-| `CUSTOM` | Use the supplied double and single schedule strings directly. |
-
-Automatic presets are architecture-aware starting points, not guarantees of equal
-visual intensity across models, quantizations, resolutions, samplers, or LoRAs.
-
-### Strength modes
-
-`normalized_total` treats `total_strength` as an approximate aggregate blend and
-distributes it across active blocks:
-
-```python
-per_application = 1 - (1 - total_strength) ** (1 / active_applications)
-```
-
-`legacy_per_block` applies schedule values directly to every active block. It more
-closely reproduces legacy behavior, but can become very strong as block count or
-step count increases.
-
-### Denoising and VRAM controls
-
-- `start_percent` and `end_percent` gate transfer over denoising progress.
-- Connect the real `SIGMAS` output for reliable progress and equal-energy scaling.
-- Later windows generally preserve composition more freely.
-- `query_chunk_size` limits the similarity matrix. Lower it to reduce peak VRAM.
-- Reduce reference resolution or count if the reference bank itself is too large.
-
-### Reference masks
-
-- `focus_only`: masks limit the explicit transfer bank while native attention can
-  still see the complete reference.
-- `zero_unmasked_tokens`: masked-out tokens are also blocked as native attention
-  sources and therefore require an attention-input-patch-capable loader.
-
-Reference order is shared with masks:
+Reference order and mask order must match:
 
 ```text
 latent_1 ↔ subject_mask_1
@@ -223,187 +103,96 @@ latent_2 ↔ subject_mask_2
 latent_8 ↔ subject_mask_8
 ```
 
-## Multi Reference Latent
+## Canonical nodes
 
-Inputs must be FLUX.2 VAE-encoded `LATENT` values. Batch items are split into
-individual references in stable order.
-
-- `replace`: replace an existing reference list.
-- `append`: preserve existing references and add the connected references.
-- `model_default`: do not force a reference method; recommended first choice.
-- `index`, `offset`, `uxo/uno`, and `index_timestep_zero`: explicit methods for
-  compatible models and loaders.
-
-A method being listed in the UI does not guarantee that a third-party loader
-implements it correctly.
-
-## Reference attention controls
-
-**Reference Attention Control** multiplies the selected reference's key/value
-tokens. A strength of `1.0` is neutral. Spatial fades derive token-space weights
-from the corresponding reference latent.
-
-**Text/Reference Balance** is neutral at `0.5`. Below that value text is
-attenuated; above it references are attenuated. It is a tradeoff control rather
-than an independent gain for both streams.
-
-## Conditioning tools
-
-Official FLUX.2 text encoders expose three selected hidden-state slices stacked in
-the final conditioning width. The generic Conditioning Enhancer can scale those
-slices when the width is divisible by three.
-
-The Sectioned Encoder supports separate fields or a combined prompt:
-
-```text
-[FRONT] subject and primary action
-[MID] clothing, props, and scene details
-[END] lighting, camera, and rendering style
-```
-
-With official Qwen and Mistral wrappers, the node reads the actual template and
-underlying tokenizer. If a third-party loader hides the tokenizer, encoding still
-works, but exact section metadata is omitted rather than fabricated.
-
-## Color Anchor and Identity Guidance
-
-These nodes act on denoised latent predictions after CFG. They are not semantic
-identity extractors.
-
-- **Color Anchor** adjusts per-channel spatial means toward a reference while
-  preserving spatial deviations.
-- **Identity Guidance — adaptive** weights latent correction by local similarity.
-- **Identity Guidance — direct** pulls every latent position toward the reference.
-- **Identity Guidance — channel_match** matches channel statistics without direct
-  spatial copying.
-
-Connect `SIGMAS` when precise start/end windows matter.
-
-## Architecture Inspector
-
-Run **FLUX.2 Architecture Inspector** after the model loader when checking a new
-checkpoint or quantized loader.
-
-Example report:
-
-```json
-{
-  "variant": "flux2_dev",
-  "hidden_size": 6144,
-  "num_heads": 48,
-  "double_blocks": 8,
-  "single_blocks": 48,
-  "context_in_dim": 15360,
-  "supports_attn_input_patch": true,
-  "supports_attn_output_patch": true
-}
-```
-
-If a loader removes a required hook, compatible nodes stop with an actionable
-error instead of silently claiming to work.
-
-## Legacy workflow compatibility
-
-Existing IDs remain registered so old workflow JSON files continue to load.
-
-| Legacy ID | Recommended new ID |
+| Node | Purpose |
 |---|---|
-| `IdentityFeatureTransferFinal` | `Flux2IdentityFeatureTransfer` |
-| `Flux2KleinMultiReferenceLatent` | `Flux2MultiReferenceLatent` |
-| `Flux2KleinRefLatentController` | `Flux2ReferenceAttentionControl` |
-| `Flux2KleinRefLatentWeight` | `Flux2ReferenceWeight` |
-| `Flux2KleinTextRefBalance` | `Flux2TextReferenceBalance` |
-| `Flux2KleinMaskRefController` | `Flux2ReferenceLatentMask` |
-| `Flux2KleinColorAnchor` | `Flux2ColorAnchor` |
-| `IdentityGuidance` | `Flux2IdentityGuidance` |
-| `Flux2KleinEnhancer` | `Flux2ConditioningEnhancer` |
-| `Flux2KleinTextEnhancer` | `Flux2TextConditioningEnhancer` |
-| `Flux2KleinSectionedEncoder` | `Flux2SectionedEncoder` |
-| `Flux2KleinDetailController` | `Flux2DetailController` |
+| **FLUX.2 Architecture Inspector** | Reports architecture, block counts, conditioning width, and loader hook capabilities. |
+| **FLUX.2 Conditioning Enhancer** | Scales and normalizes active conditioning and encoder-layer slices. |
+| **FLUX.2 Text Conditioning Enhancer** | Provides simpler magnitude, contrast, and norm controls. |
+| **FLUX.2 Sectioned Encoder** | Encodes FRONT/MID/END prompt sections and records tokenizer-derived ranges. |
+| **FLUX.2 Detail Controller** | Scales prompt sections or explicit token ranges. |
+| **FLUX.2 Multi Reference Latent** | Adds up to eight VAE-encoded references to conditioning. |
+| **FLUX.2 Reference Attention Control** | Scales one reference's attention keys and values, optionally with spatial fade. |
+| **FLUX.2 Reference Weight** | Applies a lightweight model-only reference multiplier. |
+| **FLUX.2 Text/Reference Balance** | Attenuates text or references around a neutral midpoint. |
+| **FLUX.2 Reference Latent Mask** | Attenuates masked regions inside one stored reference latent. |
+| **FLUX.2 Identity Feature Transfer** | Matches generated features to reference features during denoising. |
+| **FLUX.2 Color Anchor** | Corrects latent channel means toward a selected reference. |
+| **FLUX.2 Identity Guidance** | Applies adaptive, direct, or channel-statistic latent correction. |
 
-The basic, Advanced, and V3 identity nodes remain Klein-oriented legacy
-algorithms. The direct experimental Klein sampler is also retained only for
-workflow compatibility and is excluded from the multi-variant claim.
+See the complete input, output, neutral-value, and compatibility contract in [`docs/NODE_REFERENCE.md`](docs/NODE_REFERENCE.md).
 
-## Loader and quantization requirements
+## Identity Feature Transfer
 
-A compatible loader must preserve the capabilities required by each node:
+The identity node clones the model and installs an attention-output patch. At selected blocks and denoising steps it:
 
-- access to the FLUX.2 diffusion model and real double/single block lists;
-- `set_model_attn1_patch`;
-- `set_model_attn1_output_patch`;
-- `model_options` and sampler post-CFG callbacks;
-- `reference_image_num_tokens`;
-- `img_slice`, `block_type`, and `block_index`;
-- reference-latent forwarding.
+1. separates text, generated-image, and reference-image tokens;
+2. selects references and applies optional masks;
+3. centers and normalizes feature vectors;
+4. computes chunked cosine similarity;
+5. rejects weak matches below `similarity_floor`;
+6. pools reference features with a temperature-controlled softmax;
+7. applies confidence-gated transfer to generated-image tokens.
 
-Weight quantization alone does not prevent compatibility. Loader wrappers that
-replace or bypass ComfyUI's patch interfaces can.
+It transfers internal features, not pixels. Identity, pose, lighting, clothing, hair, and background remain partially entangled. Conservative presets, masks, later denoising windows, and fixed-seed comparisons are recommended.
 
-## Troubleshooting
+### Presets
 
-### Identity Transfer has no effect
+- `AUTO_SOFT`: more prompt and composition freedom.
+- `AUTO_BALANCED`: general starting point.
+- `AUTO_STRONG`: stronger reference lock and higher copying risk.
+- `CUSTOM`: explicit double- and single-block schedules.
 
-- Confirm reference latents reach positive conditioning.
-- Enable `debug` and inspect reference token counts.
-- Confirm at least one block has nonzero strength.
-- Check `start_percent` and `end_percent`.
-- Verify masks contain white pixels after pooling.
+### Strength modes
 
-### Identity Transfer causes OOM
+- `normalized_total`: distributes an approximate aggregate strength across active blocks.
+- `per_block`: applies schedule strengths directly at every active block.
 
-- Lower `query_chunk_size`.
-- Reduce reference resolution.
-- Use fewer references.
-- Use a face crop when only identity is needed.
-- Shorten the active block schedule.
+Lower `query_chunk_size` when similarity matching causes a VRAM spike.
 
-### Result copies pose, framing, or background
+## Example workflows
 
-- Use a tighter subject mask.
-- Start with `AUTO_SOFT`.
-- Move the active denoising window later.
-- Raise `similarity_floor`.
-- Try `focus_only` before `zero_unmasked_tokens`.
+Maintained workflows are stored in [`example_workflow/`](example_workflow/):
 
-### Section controls do not correspond to text
+- FLUX.2 dev, single-reference identity transfer;
+- Klein 9B, single-reference identity transfer;
+- two masked references;
+- reference attention controls plus identity transfer.
 
-- Inspect `flux2_section_backend`.
-- Use the official ComfyUI Mistral or Qwen tokenizer loader.
-- Use a no-op fallback when approximate sections are unwanted.
+Each workflow uses four visual zones and includes an English `MarkdownNote` beside every project node demonstrated.
 
-## Development and tests
+## Standalone API policy
+
+This repository is an independent standalone extension. Only the canonical `Flux2...` IDs in the node reference are supported. Removed historical IDs, direct experimental samplers, inherited presets, and compatibility adapters are not registered.
+
+A public node-ID or socket-breaking change requires a major release. Quantized loader compatibility is based on preserved ComfyUI hooks and metadata, not checkpoint filenames.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Node reference](docs/NODE_REFERENCE.md)
+- [Development guide](docs/DEVELOPMENT.md)
+- [Release process](docs/RELEASES.md)
+- [Example workflows](example_workflow/README.md)
+- [Implementation plan 1](plans/PLAN1.md)
+
+## Development
 
 ```bash
-python -m py_compile architecture.py scheduling.py flux2_*.py
+python -m compileall -q __init__.py comfyui_flux2dev_enhancer tests
+ruff check comfyui_flux2dev_enhancer tests --select E9,F63,F7,F82
 pytest -q
 ```
 
-Tests cover architecture fingerprints, schedules, legacy projection, strength
-normalization, reference metadata, token slicing, section ranges, registration,
-neutral execution, workflow graph integrity, Markdown Note documentation, and
-localized README navigation.
+Automated tests validate code, metadata, registry, workflow structure, layout, and documentation. They do not replace image-quality testing with real checkpoints and GPUs.
 
-Code-level tests do not prove image quality. Visual validation still requires real
-checkpoints, fixed seeds, reference images, and GPU execution.
-
-## Implementation plan
-
-See [`plans/PLAN0.md`](plans/PLAN0.md).
+See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md), [`SUPPORT.md`](SUPPORT.md), and [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md).
 
 ## Attribution
 
-Original project and algorithms:
+ComfyUI-Flux2Dev-Enhancer is maintained as an independent project by **Jader Vasque**.
 
-- **capitan01R**
-- [`ComfyUI-Flux2Klein-Enhancer`](https://github.com/capitan01R/ComfyUI-Flux2Klein-Enhancer)
+Early identity-transfer concepts and portions of the initial implementation were derived from **capitan01R's** [`ComfyUI-Flux2Klein-Enhancer`](https://github.com/capitan01R/ComfyUI-Flux2Klein-Enhancer). The upstream copyright and MIT notice are preserved in [`LICENSE`](LICENSE), [`NOTICE.md`](NOTICE.md), and [`AUTHORS.md`](AUTHORS.md).
 
-Multi-variant fork and architecture generalization:
-
-- **Jader Vasque**
-- [`ComfyUI-Flux2Dev-Enhancer`](https://github.com/jadervasque/ComfyUI-Flux2Dev-Enhancer)
-
-See [`NOTICE.md`](NOTICE.md) and [`LICENSE`](LICENSE).
-
-This repository is not affiliated with or endorsed by Black Forest Labs, ComfyUI,
-or the upstream author.
+This repository is not affiliated with or endorsed by Black Forest Labs, ComfyUI, or the upstream author. FLUX.2 model licenses are separate from this extension's MIT license; review the license of every checkpoint you use.
