@@ -24,6 +24,11 @@ FORBIDDEN_RUNTIME_TERMS = (
     "legacy_per_block",
     "klein_sections",
     "ComfyUI-Flux2Klein-Enhancer",
+    "runtime_compatibility",
+    "ensure_forward_orig_compatibility",
+    "install_flux_forward_runtime_guard",
+    "Flux.forward_orig =",
+    "Flux._forward =",
 )
 
 REMOVED_MODULES = (
