@@ -8,8 +8,6 @@ same underlying architecture.
 
 from __future__ import annotations
 
-import functools
-import inspect
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -64,14 +62,6 @@ _KNOWN_FINGERPRINTS = {
     (3072, 24, 5, 20, 7680): "flux2_klein_4b",
 }
 
-# ComfyUI added these keyword arguments to Flux.forward_orig after several custom
-# nodes had already started replacing that method. Current ComfyUI always supplies
-# them, even when their values are inactive (None). An older replacement therefore
-# fails before denoising starts. We only discard inactive values; active values need
-# native support from the replacement to preserve model semantics.
-_OPTIONAL_FORWARD_KEYWORDS = ("timestep_zero_index", "attn_mask")
-_FORWARD_COMPATIBILITY_MARKER = "_flux2dev_forward_orig_compatibility"
-
 
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
@@ -111,76 +101,6 @@ def unwrap_diffusion_model(model: Any) -> Any:
         "Unable to locate the diffusion model. The loader must expose "
         "model.diffusion_model or a compatible FLUX transformer object."
     )
-
-
-def ensure_forward_orig_compatibility(model: Any) -> bool:
-    """Adapt an older external ``forward_orig`` replacement to current ComfyUI.
-
-    Returns ``True`` when a compatibility adapter was installed. The adapter only
-    removes newly introduced optional keywords while their values are inactive. If
-    an older replacement receives an active attention mask or timestep-zero range,
-    execution stops with a targeted error instead of silently changing generation
-    semantics.
-    """
-
-    diffusion = unwrap_diffusion_model(model)
-    forward_orig = getattr(diffusion, "forward_orig", None)
-    if not callable(forward_orig):
-        return False
-    if getattr(forward_orig, _FORWARD_COMPATIBILITY_MARKER, False):
-        return False
-
-    try:
-        signature = inspect.signature(forward_orig)
-    except (TypeError, ValueError):
-        return False
-
-    parameters = signature.parameters
-    if any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
-    ):
-        return False
-
-    unsupported = {
-        keyword for keyword in _OPTIONAL_FORWARD_KEYWORDS if keyword not in parameters
-    }
-    if not unsupported:
-        return False
-
-    @functools.wraps(forward_orig)
-    def compatible_forward_orig(*args, **kwargs):
-        forwarded = dict(kwargs)
-        active_unsupported = []
-        for keyword in unsupported:
-            if keyword not in forwarded:
-                continue
-            value = forwarded[keyword]
-            inactive = value is None or (
-                keyword == "timestep_zero_index" and value == []
-            )
-            if inactive:
-                forwarded.pop(keyword)
-            else:
-                active_unsupported.append(keyword)
-        if active_unsupported:
-            replacement_name = getattr(forward_orig, "__name__", type(forward_orig).__name__)
-            raise Flux2CompatibilityError(
-                "An external FLUX forward_orig replacement is outdated and cannot "
-                f"handle active ComfyUI arguments: {', '.join(sorted(active_unsupported))}. "
-                f"Update or disable the custom patch that installed {replacement_name!r}."
-            )
-        return forward_orig(*args, **forwarded)
-
-    setattr(compatible_forward_orig, _FORWARD_COMPATIBILITY_MARKER, True)
-    try:
-        setattr(diffusion, "forward_orig", compatible_forward_orig)
-    except (AttributeError, TypeError) as exc:
-        raise Flux2CompatibilityError(
-            "The loaded model contains an outdated forward_orig replacement, but it "
-            "cannot be adapted on this loader. Update or disable the custom patch."
-        ) from exc
-    return True
 
 
 def _read_param(diffusion_model: Any, name: str, fallback: Any = None) -> Any:
@@ -291,7 +211,6 @@ def require_capabilities(
     attn_output: bool = False,
     sampler_post_cfg: bool = False,
 ) -> Flux2Architecture:
-    ensure_forward_orig_compatibility(model)
     architecture = inspect_flux2_architecture(model)
     missing: list[str] = []
     if attn_input and not architecture.supports_attn_input_patch:
@@ -312,7 +231,6 @@ def require_capabilities(
 __all__ = [
     "Flux2Architecture",
     "Flux2CompatibilityError",
-    "ensure_forward_orig_compatibility",
     "inspect_flux2_architecture",
     "require_capabilities",
     "unwrap_diffusion_model",
