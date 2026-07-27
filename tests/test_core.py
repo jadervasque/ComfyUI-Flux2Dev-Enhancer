@@ -6,38 +6,26 @@ from types import SimpleNamespace
 import pytest
 import torch
 
-from flux2_enhancer_under_test.architecture import inspect_flux2_architecture
-from flux2_enhancer_under_test.flux2_conditioning import (
+from comfyui_flux2dev_enhancer.architecture import inspect_flux2_architecture
+from comfyui_flux2dev_enhancer.conditioning import (
     Flux2ConditioningEnhancer,
     Flux2DetailController,
-    NODE_CLASS_MAPPINGS as CONDITIONING_NODES,
     _active_end,
     _compute_section_ranges,
 )
-from flux2_enhancer_under_test.flux2_guidance import (
-    NODE_CLASS_MAPPINGS as GUIDANCE_NODES,
-    _progress,
-    _reference_from_conditioning,
-)
-from flux2_enhancer_under_test.flux2_identity_transfer import (
-    NODE_CLASS_MAPPINGS as IDENTITY_NODES,
-    resolve_transfer_config,
-)
-from flux2_enhancer_under_test.flux2_reference_controls import (
-    NODE_CLASS_MAPPINGS as REFERENCE_CONTROL_NODES,
-    _reference_slice,
-)
-from flux2_enhancer_under_test.flux2_reference_latent import (
-    NODE_CLASS_MAPPINGS as REFERENCE_LATENT_NODES,
+from comfyui_flux2dev_enhancer.guidance import _progress, _reference_from_conditioning
+from comfyui_flux2dev_enhancer.identity_transfer import resolve_transfer_config
+from comfyui_flux2dev_enhancer.reference_controls import _reference_slice
+from comfyui_flux2dev_enhancer.reference_latent import (
     apply_reference_metadata,
     split_reference_batches,
 )
-from flux2_enhancer_under_test.scheduling import (
+from comfyui_flux2dev_enhancer.registry import NODE_CLASS_MAPPINGS
+from comfyui_flux2dev_enhancer.scheduling import (
     ScheduleParseError,
     normalized_per_application,
     parse_block_schedule,
     parse_reference_indices,
-    project_schedule,
 )
 
 
@@ -117,6 +105,14 @@ def test_detects_klein_4b():
     assert architecture.double_blocks == 5
 
 
+def test_detects_klein_9b():
+    architecture = inspect_flux2_architecture(
+        FakePatcher(make_params(4096, 32, 8, 24, 12288, False))
+    )
+    assert architecture.variant == "flux2_klein_9b"
+    assert architecture.single_blocks == 24
+
+
 def test_parse_schedule_and_strict_range():
     assert parse_block_schedule("0-2:mid_img=0.5; 4:0.25", 5) == {
         0: 0.5,
@@ -126,10 +122,6 @@ def test_parse_schedule_and_strict_range():
     }
     with pytest.raises(ScheduleParseError):
         parse_block_schedule("0-24:0.2", 23)
-
-
-def test_projection_reaches_target_depth():
-    assert project_schedule({0: 0.2, 23: 0.3}, 24, 48) == {0: 0.2, 47: 0.3}
 
 
 def test_normalized_strength_composes():
@@ -143,25 +135,7 @@ def test_reference_index_parser():
     assert parse_reference_indices("invalid", 3, fallback=2) == [2]
 
 
-def test_dev_legacy_schedule_projects_past_klein_depth():
-    architecture = inspect_flux2_architecture(
-        FakePatcher(make_params(6144, 48, 8, 48, 15360, True))
-    )
-    config = resolve_transfer_config(
-        architecture,
-        "KLEIN_LEGACY_HARD",
-        0.2,
-        0.07,
-        1.0,
-        "",
-        "",
-        "legacy_per_block",
-        0.65,
-    )
-    assert 23 < max(config.single_schedule) <= 47
-
-
-def test_auto_normalized_schedule_is_conservative():
+def test_auto_normalized_schedule_is_architecture_aware():
     architecture = inspect_flux2_architecture(
         FakePatcher(make_params(6144, 48, 8, 48, 15360, True))
     )
@@ -177,7 +151,37 @@ def test_auto_normalized_schedule_is_conservative():
         0.65,
     )
     assert config.double_schedule and config.single_schedule
+    assert max(config.single_schedule) <= architecture.max_single_block
     assert max(config.double_schedule.values()) < 0.2
+
+
+def test_custom_per_block_schedule_is_preserved():
+    architecture = inspect_flux2_architecture(
+        FakePatcher(make_params(4096, 32, 8, 24, 12288, False))
+    )
+    config = resolve_transfer_config(
+        architecture,
+        "CUSTOM",
+        0.3,
+        0.08,
+        0.9,
+        "0-1:0.2",
+        "3:0.25",
+        "per_block",
+        0.5,
+    )
+    assert config.double_schedule == {0: 0.2, 1: 0.2}
+    assert config.single_schedule == {3: 0.25}
+
+
+def test_unknown_preset_is_rejected():
+    architecture = inspect_flux2_architecture(
+        FakePatcher(make_params(4096, 32, 8, 24, 12288, False))
+    )
+    with pytest.raises(ValueError):
+        resolve_transfer_config(
+            architecture, "REMOVED_PRESET", 0.2, 0.07, 0.95, "", "", "per_block", 0.5
+        )
 
 
 def test_batch_reference_split_is_stable():
@@ -233,7 +237,7 @@ def test_conditioning_neutral_is_exact_pass_through():
     assert result is conditioning
 
 
-def test_detail_controller_uses_generic_section_metadata():
+def test_detail_controller_uses_section_metadata():
     tensor = torch.ones(1, 6, 3)
     conditioning = [[
         tensor,
@@ -254,15 +258,9 @@ def test_guidance_reference_lookup_and_progress():
     assert step == 2 and progress == 1.0
 
 
-def test_new_node_ids_are_registered_without_duplicates():
-    merged = {
-        **CONDITIONING_NODES,
-        **REFERENCE_LATENT_NODES,
-        **REFERENCE_CONTROL_NODES,
-        **GUIDANCE_NODES,
-        **IDENTITY_NODES,
-    }
-    expected = {
+def test_registry_exposes_only_canonical_node_ids():
+    assert set(NODE_CLASS_MAPPINGS) == {
+        "Flux2ArchitectureInspector",
         "Flux2ConditioningEnhancer",
         "Flux2TextConditioningEnhancer",
         "Flux2SectionedEncoder",
@@ -276,4 +274,8 @@ def test_new_node_ids_are_registered_without_duplicates():
         "Flux2IdentityGuidance",
         "Flux2IdentityFeatureTransfer",
     }
-    assert expected.issubset(merged)
+
+
+def test_registry_categories_use_project_namespace():
+    for node_class in NODE_CLASS_MAPPINGS.values():
+        assert node_class.CATEGORY.startswith("ComfyUI-Flux2Dev-Enhancer/")
