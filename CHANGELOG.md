@@ -23,8 +23,15 @@ All notable changes to this fork are documented here.
 - Generic conditioning and text-conditioning enhancers.
 - Qwen/Mistral template-aware section encoding with safe metadata fallback.
 - Generic color anchoring and latent identity guidance with explicit sigma input.
+- Four model-neutral example workflows for FLUX.2 dev, Klein, masked
+  multireference identity transfer, and ordered reference-attention controls.
+- Native ComfyUI `MarkdownNote` documentation beside every Enhancer node used in
+  the recommended workflows.
+- English, Brazilian Portuguese, and Spanish READMEs with reciprocal language
+  navigation.
 - Unit tests for architecture detection, schedules, metadata, tokenizer sections,
-  guidance progress, registration, and neutral execution.
+  guidance progress, registration, neutral execution, workflow links, visual
+  layout, Markdown documentation, and localized README navigation.
 - `NOTICE.md`, migration documentation, compatibility matrix, troubleshooting,
   and implementation plan.
 
@@ -40,6 +47,8 @@ All notable changes to this fork are documented here.
   route through generic implementations while preserving their input surfaces.
 - Neutral settings avoid installing hooks or requiring loader capabilities.
 - Sampler callback lists are copied before adding latent-guidance callbacks.
+- Recommended workflows now use a consistent four-zone left-to-right layout with
+  non-overlapping nodes and labeled groups.
 
 ### Deprecated
 
@@ -54,5 +63,6 @@ All notable changes to this fork are documented here.
   model, resolution, sampler, quantization, and LoRA combination.
 - GGUF, FP8, and KV-cache behavior depends on the third-party loader preserving
   ComfyUI patch interfaces and reference metadata.
-- Automated tests validate code paths and metadata handling; they do not replace
-  image-quality testing with real FLUX.2 checkpoints on supported GPUs.
+- Automated tests validate code paths, graph structure, documentation, and
+  metadata handling; they do not replace image-quality testing with real FLUX.2
+  checkpoints on supported GPUs.
