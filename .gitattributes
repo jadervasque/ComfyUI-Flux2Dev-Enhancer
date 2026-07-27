@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+*.py text diff=python
+*.md text diff=markdown
+*.json text
+*.toml text
+*.yml text
+*.yaml text
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.safetensors binary
+*.gguf binary

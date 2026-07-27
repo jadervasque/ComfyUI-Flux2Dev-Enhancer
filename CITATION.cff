@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "If you use ComfyUI-Flux2Dev-Enhancer, please cite this repository and acknowledge the upstream project listed in AUTHORS.md."
+title: "ComfyUI-Flux2Dev-Enhancer"
+type: software
+version: "1.0.0b1"
+date-released: 2026-07-26
+license: MIT
+repository-code: "https://github.com/jadervasque/ComfyUI-Flux2Dev-Enhancer"
+url: "https://github.com/jadervasque/ComfyUI-Flux2Dev-Enhancer"
+authors:
+  - family-names: "Vasque"
+    given-names: "Jader"
+    alias: "jadervasque"
+    website: "https://github.com/jadervasque"
+keywords:
+  - ComfyUI
+  - FLUX.2
+  - identity transfer
+  - image generation
+  - conditioning
