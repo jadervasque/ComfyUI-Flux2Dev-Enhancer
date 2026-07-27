@@ -1,4 +1,4 @@
-"""Schedule parsing and architecture-aware strength helpers for FLUX.2 nodes."""
+"""Schedule parsing and architecture-aware strength helpers."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import Iterable, Mapping, Sequence
 
 
 class ScheduleParseError(ValueError):
-    pass
+    """Raised when a custom transformer-block schedule is invalid."""
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def parse_block_schedule(
     strict: bool = True,
     allowed_keys: Sequence[str] = ("mid", "mid_img", "strength"),
 ) -> dict[int, float]:
-    """Parse ``0-3:mid_img=0.25; 5:0.4`` into a block-strength map."""
+    """Parse a schedule such as ``0-3:mid_img=0.25; 5:0.4``."""
 
     if max_block < 0:
         return {}
@@ -83,24 +83,9 @@ def parse_block_schedule(
 
 
 def format_block_schedule(schedule: Mapping[int, float]) -> str:
-    return "; ".join(f"{idx}:mid_img={value:.6g}" for idx, value in sorted(schedule.items()))
-
-
-def project_schedule(
-    schedule: Mapping[int, float], source_depth: int, target_depth: int
-) -> dict[int, float]:
-    """Project block positions by relative depth, merging collisions by max strength."""
-
-    if source_depth <= 0 or target_depth <= 0 or not schedule:
-        return {}
-    if source_depth == 1:
-        return {0: max(schedule.values())}
-    projected: dict[int, float] = {}
-    for source_index, strength in schedule.items():
-        relative = min(max(source_index, 0), source_depth - 1) / (source_depth - 1)
-        target_index = round(relative * (target_depth - 1))
-        projected[target_index] = max(projected.get(target_index, 0.0), float(strength))
-    return projected
+    return "; ".join(
+        f"{idx}:mid_img={value:.6g}" for idx, value in sorted(schedule.items())
+    )
 
 
 def normalized_per_application(total_strength: float, active_applications: int) -> float:
@@ -112,16 +97,6 @@ def normalized_per_application(total_strength: float, active_applications: int) 
     if strength >= 1.0:
         return 1.0
     return 1.0 - (1.0 - strength) ** (1.0 / active_applications)
-
-
-def normalize_schedule_total(
-    schedule: Mapping[int, float], total_strength: float
-) -> dict[int, float]:
-    if not schedule:
-        return {}
-    base = normalized_per_application(total_strength, len(schedule))
-    max_weight = max(float(v) for v in schedule.values()) or 1.0
-    return {idx: base * (float(weight) / max_weight) for idx, weight in schedule.items()}
 
 
 def parse_reference_indices(text: str | None, count: int, fallback: int = 0) -> list[int]:
@@ -152,7 +127,9 @@ def parse_reference_indices(text: str | None, count: int, fallback: int = 0) -> 
     return [min(max(int(fallback), 0), count - 1)]
 
 
-def relative_sparse_schedule(depth: int, points: Iterable[tuple[float, float]]) -> dict[int, float]:
+def relative_sparse_schedule(
+    depth: int, points: Iterable[tuple[float, float]]
+) -> dict[int, float]:
     if depth <= 0:
         return {}
     result: dict[int, float] = {}
@@ -165,8 +142,12 @@ def relative_sparse_schedule(depth: int, points: Iterable[tuple[float, float]]) 
 def auto_identity_preset(name: str, double_depth: int, single_depth: int) -> IdentityPreset:
     key = str(name).upper()
     if key == "AUTO_SOFT":
-        double = relative_sparse_schedule(double_depth, [(0.25, 0.30), (0.55, 0.35), (0.80, 0.25)])
-        single = relative_sparse_schedule(single_depth, [(0.35, 0.22), (0.55, 0.25), (0.75, 0.22)])
+        double = relative_sparse_schedule(
+            double_depth, [(0.25, 0.30), (0.55, 0.35), (0.80, 0.25)]
+        )
+        single = relative_sparse_schedule(
+            single_depth, [(0.35, 0.22), (0.55, 0.25), (0.75, 0.22)]
+        )
         return IdentityPreset(key, 0.50, 0.08, 0.85, 0.45, double, single)
     if key == "AUTO_STRONG":
         double = relative_sparse_schedule(
@@ -194,10 +175,8 @@ __all__ = [
     "ScheduleParseError",
     "auto_identity_preset",
     "format_block_schedule",
-    "normalize_schedule_total",
     "normalized_per_application",
     "parse_block_schedule",
     "parse_reference_indices",
-    "project_schedule",
     "relative_sparse_schedule",
 ]

@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from .architecture import require_capabilities
+from .constants import PROJECT_NAME
 
 
 def _reference_from_conditioning(conditioning, index: int):
@@ -58,6 +59,16 @@ def _progress(values, sigma: float, state: dict) -> tuple[float, int]:
     return min(max(sigma_progress, 0.0), 1.0), step
 
 
+def _install_post_cfg_callback(model, callback):
+    patched = model.clone()
+    callbacks = list(
+        patched.model_options.get("sampler_post_cfg_function", []) or []
+    )
+    callbacks.append(callback)
+    patched.model_options["sampler_post_cfg_function"] = callbacks
+    return patched
+
+
 class Flux2ColorAnchor:
     @classmethod
     def INPUT_TYPES(cls):
@@ -77,7 +88,8 @@ class Flux2ColorAnchor:
                 ),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
                 "channel_weights": (
-                    ["uniform", "by_variance"], {"default": "uniform"}
+                    ["uniform", "by_variance"],
+                    {"default": "uniform"},
                 ),
                 "start_percent": (
                     "FLOAT",
@@ -109,8 +121,8 @@ class Flux2ColorAnchor:
         sigmas=None,
         debug=False,
     ):
-        if strength <= 0.0:
-            return (model,)
+        if float(strength) <= 0.0:
+            return (model.clone(),)
         require_capabilities(model, sampler_post_cfg=True)
         reference = _reference_from_conditioning(conditioning, int(reference_index))
         if not torch.is_tensor(reference) or reference.dim() != 4:
@@ -140,8 +152,6 @@ class Flux2ColorAnchor:
                 raise ValueError(
                     "FLUX.2 Color Anchor: generated and reference latent channel counts differ."
                 )
-            # Color statistics benefit from an early ramp in very short schedules,
-            # while the reported progress remains sigma-correct for window gating.
             color_progress = max(progress, 1.0 - 0.5 ** (step + 1))
             effective = float(strength) * color_progress ** (1.0 / curve)
             reference_mean = ref_mean.to(denoised.device, denoised.dtype)
@@ -151,18 +161,13 @@ class Flux2ColorAnchor:
                 correction *= trust.to(denoised.device, denoised.dtype)
             if debug:
                 print(
-                    f"[Flux2ColorAnchor] step={step} sigma={sigma_value:.6f} "
-                    f"progress={progress:.3f} effective={effective:.3f}"
+                    f"[{PROJECT_NAME}:ColorAnchor] step={step} "
+                    f"sigma={sigma_value:.6f} progress={progress:.3f} "
+                    f"effective={effective:.3f}"
                 )
             return denoised + correction * effective
 
-        patched = model.clone()
-        callbacks = list(
-            patched.model_options.get("sampler_post_cfg_function", []) or []
-        )
-        callbacks.append(callback)
-        patched.model_options["sampler_post_cfg_function"] = callbacks
-        return (patched,)
+        return (_install_post_cfg_callback(model, callback),)
 
 
 class Flux2IdentityGuidance:
@@ -210,8 +215,8 @@ class Flux2IdentityGuidance:
         sigmas=None,
         debug=False,
     ):
-        if strength <= 0.0:
-            return (model,)
+        if float(strength) <= 0.0:
+            return (model.clone(),)
         require_capabilities(model, sampler_post_cfg=True)
         reference = (
             identity_latent.get("samples")
@@ -253,12 +258,8 @@ class Flux2IdentityGuidance:
                 ref_mean = ref.mean(dim=(-2, -1), keepdim=True)
                 ref_std = ref.std(dim=(-2, -1), keepdim=True).clamp(min=1e-5)
                 current_mean = denoised.mean(dim=(-2, -1), keepdim=True)
-                current_std = denoised.std(
-                    dim=(-2, -1), keepdim=True
-                ).clamp(min=1e-5)
-                matched = (
-                    (denoised - current_mean) / current_std * ref_std + ref_mean
-                )
+                current_std = denoised.std(dim=(-2, -1), keepdim=True).clamp(min=1e-5)
+                matched = (denoised - current_mean) / current_std * ref_std + ref_mean
                 output = denoised + (matched - denoised) * float(strength)
             else:
                 similarity = F.cosine_similarity(
@@ -270,132 +271,30 @@ class Flux2IdentityGuidance:
                 output = denoised + (ref - denoised) * weight * float(strength)
             if debug:
                 print(
-                    f"[Flux2IdentityGuidance] step={step} sigma={sigma_value:.6f} "
-                    f"progress={progress:.3f} mode={mode} strength={strength}"
+                    f"[{PROJECT_NAME}:IdentityGuidance] step={step} "
+                    f"sigma={sigma_value:.6f} progress={progress:.3f} "
+                    f"mode={mode} strength={strength}"
                 )
             return output
 
-        patched = model.clone()
-        callbacks = list(
-            patched.model_options.get("sampler_post_cfg_function", []) or []
-        )
-        callbacks.append(callback)
-        patched.model_options["sampler_post_cfg_function"] = callbacks
-        return (patched,)
-
-
-class LegacyFlux2KleinColorAnchor:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "conditioning": ("CONDITIONING",),
-                "strength": (
-                    "FLOAT",
-                    {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05},
-                ),
-            },
-            "optional": {
-                "ramp_curve": (
-                    "FLOAT",
-                    {"default": 1.5, "min": 0.5, "max": 8.0, "step": 0.1},
-                ),
-                "ref_index": ("INT", {"default": 0, "min": 0, "max": 63}),
-                "channel_weights": (
-                    ["uniform", "by_variance"], {"default": "uniform"}
-                ),
-                "debug": ("BOOLEAN", {"default": False}),
-            },
-        }
-
-    RETURN_TYPES = ("MODEL",)
-    FUNCTION = "apply"
-    CATEGORY = "conditioning/flux2/legacy"
-
-    def apply(
-        self,
-        model,
-        conditioning,
-        strength=0.5,
-        ramp_curve=1.5,
-        ref_index=0,
-        channel_weights="uniform",
-        debug=False,
-    ):
-        return Flux2ColorAnchor().apply(
-            model,
-            conditioning,
-            strength,
-            ramp_curve,
-            ref_index,
-            channel_weights,
-            0.0,
-            1.0,
-            None,
-            debug,
-        )
-
-
-class LegacyIdentityGuidance:
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "identity_latent": ("LATENT",),
-                "strength": (
-                    "FLOAT",
-                    {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01},
-                ),
-                "start_percent": (
-                    "FLOAT",
-                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05},
-                ),
-                "end_percent": (
-                    "FLOAT",
-                    {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.05},
-                ),
-                "mode": (
-                    ["adaptive", "direct", "channel_match"],
-                    {"default": "adaptive"},
-                ),
-            }
-        }
-
-    RETURN_TYPES = ("MODEL",)
-    FUNCTION = "apply"
-    CATEGORY = "conditioning/flux2/legacy"
-
-    def apply(
-        self,
-        model,
-        identity_latent,
-        strength=0.3,
-        start_percent=0.0,
-        end_percent=0.8,
-        mode="adaptive",
-    ):
-        return Flux2IdentityGuidance().apply(
-            model,
-            identity_latent,
-            strength,
-            start_percent,
-            end_percent,
-            mode,
-        )
+        return (_install_post_cfg_callback(model, callback),)
 
 
 NODE_CLASS_MAPPINGS = {
     "Flux2ColorAnchor": Flux2ColorAnchor,
     "Flux2IdentityGuidance": Flux2IdentityGuidance,
-    "Flux2KleinColorAnchor": LegacyFlux2KleinColorAnchor,
-    "IdentityGuidance": LegacyIdentityGuidance,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Flux2ColorAnchor": "FLUX.2 Color Anchor",
     "Flux2IdentityGuidance": "FLUX.2 Identity Guidance",
-    "Flux2KleinColorAnchor": "FLUX.2 Klein Color Anchor (Legacy)",
-    "IdentityGuidance": "FLUX.2 Klein Identity Guidance (Legacy)",
 }
+
+__all__ = [
+    "Flux2ColorAnchor",
+    "Flux2IdentityGuidance",
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "_progress",
+    "_reference_from_conditioning",
+]

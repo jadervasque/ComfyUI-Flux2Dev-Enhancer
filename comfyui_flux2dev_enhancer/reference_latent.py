@@ -1,4 +1,4 @@
-"""Reference-latent conditioning nodes shared by all compatible FLUX.2 variants."""
+"""Reference-latent conditioning nodes for compatible FLUX.2 variants."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from typing import Iterable
 
 import torch
 
+from .constants import PROJECT_NAME
 
 _REFERENCE_METHODS = {
     "model_default",
@@ -129,60 +130,26 @@ class Flux2MultiReferenceLatent:
         if debug:
             shapes = [tuple(reference.shape) for reference in references]
             print(
-                "[Flux2MultiReferenceLatent] "
+                f"[{PROJECT_NAME}:MultiReferenceLatent] "
                 f"mode={mode} method={reference_method} "
                 f"references={len(references)} shapes={shapes}"
             )
         return (output,)
 
 
-class LegacyMultiReferenceLatent:
-    """Original input surface: replace references and force indexed placement."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "conditioning": ("CONDITIONING",),
-                "latent_1": ("LATENT",),
-            },
-            "optional": {
-                "latent_2": ("LATENT",),
-                "latent_3": ("LATENT",),
-                "latent_4": ("LATENT",),
-                "latent_5": ("LATENT",),
-                "latent_6": ("LATENT",),
-                "latent_7": ("LATENT",),
-                "latent_8": ("LATENT",),
-            },
-        }
-
-    RETURN_TYPES = ("CONDITIONING",)
-    RETURN_NAMES = ("conditioning",)
-    FUNCTION = "apply"
-    CATEGORY = "conditioning/flux2/legacy"
-
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        return False
-
-    def apply(self, conditioning, latent_1, **optional):
-        return Flux2MultiReferenceLatent().apply(
-            conditioning,
-            latent_1,
-            mode="replace",
-            reference_method="index",
-            debug=False,
-            **optional,
-        )
-
-
 NODE_CLASS_MAPPINGS = {
     "Flux2MultiReferenceLatent": Flux2MultiReferenceLatent,
-    "Flux2KleinMultiReferenceLatent": LegacyMultiReferenceLatent,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Flux2MultiReferenceLatent": "FLUX.2 Multi Reference Latent",
-    "Flux2KleinMultiReferenceLatent": "Multi ReferenceLatent (Legacy)",
 }
+
+__all__ = [
+    "Flux2MultiReferenceLatent",
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "apply_reference_metadata",
+    "latent_samples",
+    "split_reference_batches",
+]

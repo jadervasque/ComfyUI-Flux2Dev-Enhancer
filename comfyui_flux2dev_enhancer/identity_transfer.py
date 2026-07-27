@@ -9,27 +9,13 @@ import torch
 import torch.nn.functional as F
 
 from .architecture import Flux2Architecture, require_capabilities
+from .constants import PROJECT_NAME
 from .scheduling import (
     auto_identity_preset,
     normalized_per_application,
     parse_block_schedule,
     parse_reference_indices,
-    project_schedule,
 )
-
-
-LEGACY_HARD_DOUBLE = "0-7:mid_img=0.55"
-LEGACY_HARD_SINGLE = (
-    "0:mid_img=0.22; 1:mid_img=0.24; 3:mid_img=0.28; "
-    "4:mid_img=0.22; 6:mid_img=0.26; 7:mid_img=0.27; "
-    "8:mid_img=0.25; 10:mid_img=0.27; 13:mid_img=0.27"
-)
-
-_LEGACY_PRESETS = {
-    "KLEIN_LEGACY_HARD": (0.040, 0.0250, 1.0),
-    "KLEIN_LEGACY_MID": (0.200, 0.0700, 1.0),
-    "KLEIN_LEGACY_SOFT": (0.500, 0.0700, 1.0),
-}
 
 
 @dataclass(frozen=True)
@@ -102,7 +88,9 @@ def _sigma_schedule(sigmas):
         raise ValueError("FLUX.2 Identity Feature Transfer: invalid sigma schedule.")
     deltas = (values[:-1] - values[1:]).abs()
     if torch.any(deltas <= 0).item():
-        raise ValueError("FLUX.2 Identity Feature Transfer: sigma intervals must be non-zero.")
+        raise ValueError(
+            "FLUX.2 Identity Feature Transfer: sigma intervals must be non-zero."
+        )
     return values, deltas[0] / deltas
 
 
@@ -158,23 +146,23 @@ def resolve_transfer_config(
         similarity_floor = resolved.similarity_floor
         softmax_temperature = resolved.temperature
         mask_threshold = resolved.mask_threshold
-    elif preset_key in _LEGACY_PRESETS:
-        similarity_floor, softmax_temperature, mask_threshold = _LEGACY_PRESETS[preset_key]
-        legacy_double = parse_block_schedule(LEGACY_HARD_DOUBLE, 7)
-        legacy_single = parse_block_schedule(LEGACY_HARD_SINGLE, 23)
-        double_schedule = project_schedule(legacy_double, 8, architecture.double_blocks)
-        single_schedule = project_schedule(legacy_single, 24, architecture.single_blocks)
-    else:
+    elif preset_key == "CUSTOM":
         double_schedule = parse_block_schedule(
             double_blocks, architecture.max_double_block, strict=True
         )
         single_schedule = parse_block_schedule(
             single_blocks, architecture.max_single_block, strict=True
         )
+    else:
+        raise ValueError(f"Unknown FLUX.2 identity-transfer preset {preset!r}.")
 
     if str(strength_mode) == "normalized_total":
         double_schedule, single_schedule = _normalize_pair(
             double_schedule, single_schedule, total_strength
+        )
+    elif str(strength_mode) != "per_block":
+        raise ValueError(
+            "FLUX.2 Identity Feature Transfer: strength_mode must be normalized_total or per_block."
         )
 
     return TransferConfig(
@@ -196,22 +184,17 @@ class Flux2IdentityFeatureTransfer:
             "required": {
                 "model": ("MODEL",),
                 "preset": (
-                    [
-                        "AUTO_BALANCED",
-                        "AUTO_SOFT",
-                        "AUTO_STRONG",
-                        "KLEIN_LEGACY_HARD",
-                        "KLEIN_LEGACY_MID",
-                        "KLEIN_LEGACY_SOFT",
-                        "CUSTOM",
-                    ],
+                    ["AUTO_BALANCED", "AUTO_SOFT", "AUTO_STRONG", "CUSTOM"],
                     {"default": "AUTO_BALANCED"},
                 ),
                 "enabled": ("BOOLEAN", {"default": True}),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
-                "reference_indices": ("STRING", {"default": "all", "multiline": False}),
+                "reference_indices": (
+                    "STRING",
+                    {"default": "all", "multiline": False},
+                ),
                 "strength_mode": (
-                    ["normalized_total", "legacy_per_block"],
+                    ["normalized_total", "per_block"],
                     {"default": "normalized_total"},
                 ),
                 "total_strength": (
@@ -252,7 +235,10 @@ class Flux2IdentityFeatureTransfer:
                     "FLOAT",
                     {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
                 ),
-                "sigma_scaling": (["none", "equal_energy"], {"default": "none"}),
+                "sigma_scaling": (
+                    ["none", "equal_energy"],
+                    {"default": "none"},
+                ),
                 "mask_behavior": (
                     ["focus_only", "zero_unmasked_tokens"],
                     {"default": "focus_only"},
@@ -320,15 +306,33 @@ class Flux2IdentityFeatureTransfer:
         subject_mask_7=None,
         subject_mask_8=None,
     ):
-        architecture = require_capabilities(
-            model,
-            attn_output=True,
-            attn_input=mask_behavior == "zero_unmasked_tokens",
-        )
         patched = model.clone()
         if not bool(enabled):
             return (patched,)
+        if str(strength_mode) == "normalized_total" and float(total_strength) <= 0.0:
+            return (patched,)
 
+        masks = [
+            _prepare_mask(subject_mask_1),
+            _prepare_mask(subject_mask_2),
+            _prepare_mask(subject_mask_3),
+            _prepare_mask(subject_mask_4),
+            _prepare_mask(subject_mask_5),
+            _prepare_mask(subject_mask_6),
+            _prepare_mask(subject_mask_7),
+            _prepare_mask(subject_mask_8),
+        ]
+        effective_mask_behavior = str(mask_behavior)
+        if effective_mask_behavior == "zero_unmasked_tokens" and not any(
+            mask is not None for mask in masks
+        ):
+            effective_mask_behavior = "focus_only"
+
+        architecture = require_capabilities(
+            model,
+            attn_output=True,
+            attn_input=effective_mask_behavior == "zero_unmasked_tokens",
+        )
         config = resolve_transfer_config(
             architecture,
             preset,
@@ -343,16 +347,6 @@ class Flux2IdentityFeatureTransfer:
         if not config.double_schedule and not config.single_schedule:
             return (patched,)
 
-        masks = [
-            _prepare_mask(subject_mask_1),
-            _prepare_mask(subject_mask_2),
-            _prepare_mask(subject_mask_3),
-            _prepare_mask(subject_mask_4),
-            _prepare_mask(subject_mask_5),
-            _prepare_mask(subject_mask_6),
-            _prepare_mask(subject_mask_7),
-            _prepare_mask(subject_mask_8),
-        ]
         mask_cache: Dict[Tuple[int, int, float], torch.Tensor] = {}
         sigma_info = _sigma_schedule(sigmas)
         start = min(max(float(start_percent), 0.0), 1.0)
@@ -371,7 +365,9 @@ class Flux2IdentityFeatureTransfer:
                 grid = _grid_for_tokens(count, source)
                 pooled = F.adaptive_avg_pool2d(source[None, None], grid).view(-1)
                 keep = pooled >= config.mask_threshold
-                mask_cache[key] = torch.nonzero(keep, as_tuple=False).squeeze(-1).long().cpu()
+                mask_cache[key] = (
+                    torch.nonzero(keep, as_tuple=False).squeeze(-1).long().cpu()
+                )
             return mask_cache[key].to(device)
 
         def selected_slices(ref_tokens: Sequence[int], base: int):
@@ -428,7 +424,9 @@ class Flux2IdentityFeatureTransfer:
             )
             return progress, 1.0, None, current_sigma
 
-        def pull_features(generated: torch.Tensor, reference: torch.Tensor, strength: float):
+        def pull_features(
+            generated: torch.Tensor, reference: torch.Tensor, strength: float
+        ):
             if strength <= 0.0 or reference is None or reference.shape[1] == 0:
                 return None
             gen_float = generated.float()
@@ -453,7 +451,9 @@ class Flux2IdentityFeatureTransfer:
                 weights = torch.nan_to_num(weights, nan=0.0)
                 pooled = torch.bmm(weights, ref_float)
                 best = similarity.max(dim=-1).values
-                best = torch.where(torch.isfinite(best), best, torch.zeros_like(best))
+                best = torch.where(
+                    torch.isfinite(best), best, torch.zeros_like(best)
+                )
                 confidence = (
                     (best - config.similarity_floor)
                     / max(1.0 - config.similarity_floor, 1e-6)
@@ -542,7 +542,9 @@ class Flux2IdentityFeatureTransfer:
             if strength <= 0.0:
                 return attention
 
-            progress, sigma_multiplier, sigma_step, current_sigma = step_controls(extra_options)
+            progress, sigma_multiplier, sigma_step, current_sigma = step_controls(
+                extra_options
+            )
             if progress < start or progress > end:
                 return attention
             strength *= sigma_multiplier
@@ -571,7 +573,7 @@ class Flux2IdentityFeatureTransfer:
             if debug and debug_key not in debug_steps:
                 debug_steps.add(debug_key)
                 print(
-                    "[Flux2IdentityFeatureTransfer] "
+                    f"[{PROJECT_NAME}:IdentityFeatureTransfer] "
                     f"variant={architecture.variant} block={block_type}:{block_index} "
                     f"strength={strength:.6f} progress={progress:.3f} "
                     f"sigma_step={sigma_step} sigma={current_sigma} "
@@ -582,144 +584,31 @@ class Flux2IdentityFeatureTransfer:
 
         if debug:
             print(
-                "[Flux2IdentityFeatureTransfer] "
+                f"[{PROJECT_NAME}:IdentityFeatureTransfer] "
                 f"architecture={architecture.to_dict()} preset={preset} "
                 f"sim={config.similarity_floor:.4f} temp={config.temperature:.4f} "
                 f"double={config.double_schedule} single={config.single_schedule} "
-                f"mask_behavior={mask_behavior} sigma_scaling={sigma_scaling}"
+                f"mask_behavior={effective_mask_behavior} sigma_scaling={sigma_scaling}"
             )
 
         patched.set_model_attn1_output_patch(output_patch)
-        if mask_behavior == "zero_unmasked_tokens" and any(
-            mask is not None for mask in masks
-        ):
+        if effective_mask_behavior == "zero_unmasked_tokens":
             patched.set_model_attn1_patch(source_mask_patch)
         return (patched,)
 
 
-class LegacyIdentityFeatureTransferFinal:
-    """Compatibility adapter for workflows using the original node identifier."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "model": ("MODEL",),
-                "preset": (
-                    ["HARD_LOCK", "MID_LOCK", "SOFT_LOCK", "custom"],
-                    {"default": "HARD_LOCK"},
-                ),
-                "enabled": ("BOOLEAN", {"default": True}),
-                "reference_index": ("INT", {"default": 0, "min": 0, "max": 15}),
-                "reference_indices": ("STRING", {"default": "all", "multiline": False}),
-                "similarity_floor": (
-                    "FLOAT",
-                    {"default": 0.040, "min": 0.0, "max": 0.95, "step": 0.001},
-                ),
-                "softmax_temperature": (
-                    "FLOAT",
-                    {"default": 0.025, "min": 0.0001, "max": 0.25, "step": 0.0001},
-                ),
-                "mask_threshold": (
-                    "FLOAT",
-                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
-                ),
-                "double_blocks": (
-                    "STRING",
-                    {"default": LEGACY_HARD_DOUBLE, "multiline": False},
-                ),
-                "single_blocks": (
-                    "STRING",
-                    {"default": LEGACY_HARD_SINGLE, "multiline": False},
-                ),
-                "debug": ("BOOLEAN", {"default": False}),
-                "mask_behavior": (
-                    ["focus_only", "zero_unmasked_tokens"],
-                    {"default": "focus_only"},
-                ),
-            },
-            "optional": {
-                "sigmas": ("SIGMAS", {"forceInput": True}),
-                "subject_mask_1": ("MASK",),
-                "subject_mask_2": ("MASK",),
-                "subject_mask_3": ("MASK",),
-                "subject_mask_4": ("MASK",),
-                "subject_mask_5": ("MASK",),
-                "subject_mask_6": ("MASK",),
-                "subject_mask_7": ("MASK",),
-                "subject_mask_8": ("MASK",),
-            },
-        }
-
-    RETURN_TYPES = ("MODEL",)
-    FUNCTION = "apply"
-    CATEGORY = "conditioning/flux2/legacy"
-
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        return False
-
-    def apply(
-        self,
-        model,
-        preset="HARD_LOCK",
-        enabled=True,
-        reference_index=0,
-        reference_indices="all",
-        similarity_floor=0.040,
-        softmax_temperature=0.025,
-        mask_threshold=1.0,
-        double_blocks=LEGACY_HARD_DOUBLE,
-        single_blocks=LEGACY_HARD_SINGLE,
-        debug=False,
-        mask_behavior="focus_only",
-        sigmas=None,
-        **masks,
-    ):
-        preset_map = {
-            "HARD_LOCK": "KLEIN_LEGACY_HARD",
-            "MID_LOCK": "KLEIN_LEGACY_MID",
-            "SOFT_LOCK": "KLEIN_LEGACY_SOFT",
-            "custom": "CUSTOM",
-        }
-        return Flux2IdentityFeatureTransfer().apply(
-            model=model,
-            preset=preset_map.get(preset, "KLEIN_LEGACY_HARD"),
-            enabled=enabled,
-            reference_index=reference_index,
-            reference_indices=reference_indices,
-            strength_mode="legacy_per_block",
-            total_strength=1.0,
-            similarity_floor=similarity_floor,
-            softmax_temperature=softmax_temperature,
-            mask_threshold=mask_threshold,
-            double_blocks=double_blocks,
-            single_blocks=single_blocks,
-            start_percent=0.0,
-            end_percent=1.0,
-            sigma_scaling="equal_energy" if sigmas is not None else "none",
-            mask_behavior=mask_behavior,
-            query_chunk_size=256,
-            debug=debug,
-            sigmas=sigmas,
-            **masks,
-        )
-
-
 NODE_CLASS_MAPPINGS = {
     "Flux2IdentityFeatureTransfer": Flux2IdentityFeatureTransfer,
-    "IdentityFeatureTransferFinal": LegacyIdentityFeatureTransferFinal,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "Flux2IdentityFeatureTransfer": "FLUX.2 Identity Feature Transfer",
-    "IdentityFeatureTransferFinal": "Identity Feature Transfer Final (Legacy)",
 }
-
 
 __all__ = [
     "Flux2IdentityFeatureTransfer",
-    "LegacyIdentityFeatureTransferFinal",
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
     "TransferConfig",
     "resolve_transfer_config",
 ]
