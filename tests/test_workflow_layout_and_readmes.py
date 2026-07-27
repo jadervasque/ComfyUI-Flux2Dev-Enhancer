@@ -110,9 +110,9 @@ def test_recommended_workflows_use_four_ordered_visual_groups():
 
 def test_localized_readmes_have_reciprocal_language_navigation():
     files = {
-        "README.md": "# ComfyUI FLUX.2 Enhancer",
-        "README.pt-BR.md": "# ComfyUI FLUX.2 Enhancer",
-        "README.es.md": "# ComfyUI FLUX.2 Enhancer",
+        "README.md": "# ComfyUI-Flux2Dev-Enhancer",
+        "README.pt-BR.md": "# ComfyUI-Flux2Dev-Enhancer",
+        "README.es.md": "# ComfyUI-Flux2Dev-Enhancer",
     }
     required_links = (
         "[English](README.md)",

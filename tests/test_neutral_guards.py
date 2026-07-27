@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from flux2_enhancer_under_test.flux2_guidance import (
+from comfyui_flux2dev_enhancer.guidance import (
     Flux2ColorAnchor,
     Flux2IdentityGuidance,
 )
-from flux2_enhancer_under_test.flux2_identity_nodes import Flux2IdentityFeatureTransfer
-from flux2_enhancer_under_test.flux2_reference_controls import (
+from comfyui_flux2dev_enhancer.identity_transfer import Flux2IdentityFeatureTransfer
+from comfyui_flux2dev_enhancer.reference_controls import (
     Flux2ReferenceWeight,
     Flux2TextReferenceBalance,
 )
@@ -19,6 +19,16 @@ class CloneOnlyModel:
 def test_disabled_identity_transfer_is_loader_independent():
     model = CloneOnlyModel()
     assert Flux2IdentityFeatureTransfer().apply(model, enabled=False)[0] is model
+
+
+def test_zero_total_identity_transfer_is_loader_independent():
+    model = CloneOnlyModel()
+    assert (
+        Flux2IdentityFeatureTransfer().apply(
+            model, strength_mode="normalized_total", total_strength=0.0
+        )[0]
+        is model
+    )
 
 
 def test_neutral_reference_weight_is_loader_independent():

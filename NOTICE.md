@@ -1,20 +1,26 @@
-# Attribution and project status
+# Notices and attribution
 
-This repository is an independent fork of
-[`capitan01R/ComfyUI-Flux2Klein-Enhancer`](https://github.com/capitan01R/ComfyUI-Flux2Klein-Enhancer).
+## Current project
 
-The original project, node algorithms, initial documentation, and repository
-structure were created by **capitan01R** and distributed under the MIT License.
-The original copyright notice remains in `LICENSE`.
+**ComfyUI-Flux2Dev-Enhancer** is an independent standalone ComfyUI extension maintained by **Jader Vasque**.
 
-The fork maintained by **Jader Vasque** adds architecture-aware FLUX.2 support,
-model-neutral node identifiers, dynamic block schedules, cumulative-strength
-normalization, generic reference controls, Mistral and Qwen conditioning support,
-defensive loader validation, tests, migration documentation, and compatibility
-adapters for existing workflows.
+Repository: https://github.com/jadervasque/ComfyUI-Flux2Dev-Enhancer
 
-This project is not affiliated with, endorsed by, or maintained by Black Forest
-Labs, the ComfyUI project, or the original upstream author. FLUX.2 checkpoint
-licenses are separate from the MIT license covering this extension's source code.
-Users are responsible for complying with the license attached to each model and
-checkpoint they load.
+## Upstream acknowledgement
+
+Early identity-transfer concepts and portions of the initial code were derived from:
+
+- **Project:** ComfyUI-Flux2Klein-Enhancer
+- **Author:** capitan01R
+- **Repository:** https://github.com/capitan01R/ComfyUI-Flux2Klein-Enhancer
+- **License:** MIT
+
+The upstream copyright and permission notice are preserved in `LICENSE` as required by the MIT license. This acknowledgement does not imply that the current repository is maintained, endorsed, or supported by the upstream author.
+
+## Independence and trademarks
+
+This repository is not affiliated with or endorsed by Black Forest Labs, ComfyUI, or the upstream project author. Product, project, and model names belong to their respective owners.
+
+## Model and loader licenses
+
+The MIT license in this repository applies to this extension's source code. FLUX.2 checkpoints, text encoders, VAEs, LoRAs, quantized repacks, and third-party loaders may use different licenses and usage restrictions. Users are responsible for reviewing the license and acceptable-use terms of every external asset they load.

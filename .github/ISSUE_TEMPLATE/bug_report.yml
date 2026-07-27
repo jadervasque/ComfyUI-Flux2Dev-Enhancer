@@ -1,75 +1,87 @@
 name: Bug report
-description: Report a reproducible problem with the node.
+description: Report a reproducible defect in a supported node or maintained workflow.
 title: "[Bug]: "
 labels:
   - bug
-  - needs-repro
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a problem.
-
-        For usage questions, workflow help, or suggestions, please use Discussions instead.
-
-  - type: textarea
-    id: what_happened
-    attributes:
-      label: What happened?
-      description: Briefly describe the problem.
-      placeholder: The node loads, but generation stops with an error.
-    validations:
-      required: true
-
-  - type: textarea
-    id: setup
-    attributes:
-      label: Setup
-      description: Paste the basics if you know them.
-      value: |
-        ComfyUI commit:
-        Node commit/version:
-        OS:
-        GPU:
-        Python / torch:
-    validations:
-      required: false
-
-  - type: textarea
-    id: error_log
-    attributes:
-      label: Error log
-      description: Paste the terminal or console error if there is one.
-      placeholder: Paste full error here.
-      render: shell
-    validations:
-      required: false
-
-  - type: textarea
-    id: workflow_screenshot
-    attributes:
-      label: Workflow / screenshot
-      description: Drag and drop the workflow JSON, screenshot, or log file here if it helps.
-      placeholder: Drop files here or paste extra context.
-    validations:
-      required: false
-
-  - type: textarea
-    id: steps
-    attributes:
-      label: Steps to reproduce
-      description: What should I do to trigger the same problem?
-      value: |
-        1.
-        2.
-        3.
-    validations:
-      required: true
-
+        Include enough information to reproduce the problem. Remove private paths, prompts, images, and credentials before submitting.
   - type: checkboxes
-    id: confirm
+    id: checks
     attributes:
-      label: Quick check
+      label: Pre-submission checks
       options:
-        - label: I can reproduce this with the information above.
+        - label: I searched existing issues and pull requests.
           required: true
+        - label: I am using a node ID documented in docs/NODE_REFERENCE.md.
+          required: true
+        - label: I reproduced the issue without unrelated custom nodes when practical.
+          required: true
+        - label: This is not a security vulnerability; security reports follow SECURITY.md.
+          required: true
+  - type: input
+    id: extension-version
+    attributes:
+      label: Extension version or commit
+      placeholder: 1.0.0b1 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: comfyui-version
+    attributes:
+      label: ComfyUI version or commit
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python, GPU, VRAM, driver, loader, checkpoint, text encoder, VAE, precision/quantization.
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow and settings
+      description: Sampler, scheduler, steps, guidance, resolution, seed, references, masks, and relevant node values.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Load...
+        2. Connect...
+        3. Queue...
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Complete traceback or logs
+      render: shell
+  - type: textarea
+    id: architecture-report
+    attributes:
+      label: Architecture Inspector output
+      description: Required for loader, quantization, attention-hook, or reference-metadata issues.
+      render: json
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

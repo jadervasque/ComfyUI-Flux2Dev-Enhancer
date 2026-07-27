@@ -1,4 +1,4 @@
-"""Architecture-neutral reference controls for FLUX.2 attention and latents."""
+"""Reference-attention and reference-latent controls for FLUX.2."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import torch
 import torch.nn.functional as F
 
 from .architecture import require_capabilities
+from .constants import PROJECT_NAME
 
 
 def _reference_slice(ref_tokens, reference_index: int, sequence_length: int):
@@ -76,7 +77,8 @@ class Flux2ReferenceAttentionControl:
                 "model": ("MODEL",),
                 "conditioning": ("CONDITIONING",),
                 "strength": (
-                    "FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
                 ),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
             },
@@ -86,7 +88,8 @@ class Flux2ReferenceAttentionControl:
                     {"default": "none"},
                 ),
                 "spatial_fade_strength": (
-                    "FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05}
+                    "FLOAT",
+                    {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.05},
                 ),
                 "debug": ("BOOLEAN", {"default": False}),
             },
@@ -110,7 +113,7 @@ class Flux2ReferenceAttentionControl:
         if float(strength) == 1.0 and spatial_fade == "none":
             return patched, conditioning
         require_capabilities(model, attn_input=True)
-        reference_latent = _find_reference_latent(conditioning, reference_index)
+        reference_latent = _find_reference_latent(conditioning, int(reference_index))
 
         def attention_patch(q, k, v, extra_options=None, **kwargs):
             options = extra_options or kwargs.get("extra_options") or {}
@@ -134,9 +137,9 @@ class Flux2ReferenceAttentionControl:
             new_v[:, :, start:end, :] *= scale
             if debug:
                 print(
-                    f"[Flux2ReferenceAttentionControl] block={options.get('block_type')}:"
-                    f"{options.get('block_index')} reference={reference_index} "
-                    f"tokens={start}:{end} strength={strength}"
+                    f"[{PROJECT_NAME}:ReferenceAttentionControl] "
+                    f"block={options.get('block_type')}:{options.get('block_index')} "
+                    f"reference={reference_index} tokens={start}:{end} strength={strength}"
                 )
             return {"q": q, "k": new_k, "v": new_v}
 
@@ -152,7 +155,8 @@ class Flux2ReferenceWeight:
                 "model": ("MODEL",),
                 "reference_index": ("INT", {"default": 0, "min": 0, "max": 63}),
                 "weight": (
-                    "FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
                 ),
             }
         }
@@ -194,7 +198,8 @@ class Flux2TextReferenceBalance:
                 "model": ("MODEL",),
                 "conditioning": ("CONDITIONING",),
                 "balance": (
-                    "FLOAT", {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001}
+                    "FLOAT",
+                    {"default": 0.5, "min": 0.0, "max": 1.0, "step": 0.001},
                 ),
             },
             "optional": {"debug": ("BOOLEAN", {"default": False})},
@@ -229,8 +234,8 @@ class Flux2TextReferenceBalance:
                 new_v[:, :, -count:, :] *= reference_scale
             if debug:
                 print(
-                    f"[Flux2TextReferenceBalance] text={text_scale:.3f} "
-                    f"reference={reference_scale:.3f}"
+                    f"[{PROJECT_NAME}:TextReferenceBalance] "
+                    f"text={text_scale:.3f} reference={reference_scale:.3f}"
                 )
             return {"q": q, "k": new_k, "v": new_v}
 
@@ -245,7 +250,8 @@ class Flux2ReferenceLatentMask:
             "required": {"conditioning": ("CONDITIONING",), "mask": ("MASK",)},
             "optional": {
                 "strength": (
-                    "FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05}
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05},
                 ),
                 "invert_mask": ("BOOLEAN", {"default": False}),
                 "feather": ("INT", {"default": 0, "min": 0, "max": 64}),
@@ -315,8 +321,9 @@ class Flux2ReferenceLatentMask:
             output.append([cond, new_meta])
             if debug:
                 print(
-                    f"[Flux2ReferenceLatentMask] reference={reference_index} "
-                    f"shape={tuple(reference.shape)} strength={strength} feather={feather}"
+                    f"[{PROJECT_NAME}:ReferenceLatentMask] "
+                    f"reference={reference_index} shape={tuple(reference.shape)} "
+                    f"strength={strength} feather={feather}"
                 )
         return (output,)
 
@@ -326,10 +333,6 @@ NODE_CLASS_MAPPINGS = {
     "Flux2ReferenceWeight": Flux2ReferenceWeight,
     "Flux2TextReferenceBalance": Flux2TextReferenceBalance,
     "Flux2ReferenceLatentMask": Flux2ReferenceLatentMask,
-    "Flux2KleinRefLatentController": Flux2ReferenceAttentionControl,
-    "Flux2KleinRefLatentWeight": Flux2ReferenceWeight,
-    "Flux2KleinTextRefBalance": Flux2TextReferenceBalance,
-    "Flux2KleinMaskRefController": Flux2ReferenceLatentMask,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -337,8 +340,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Flux2ReferenceWeight": "FLUX.2 Reference Weight",
     "Flux2TextReferenceBalance": "FLUX.2 Text/Reference Balance",
     "Flux2ReferenceLatentMask": "FLUX.2 Reference Latent Mask",
-    "Flux2KleinRefLatentController": "FLUX.2 Klein Ref Latent Controller (Legacy)",
-    "Flux2KleinRefLatentWeight": "FLUX.2 Klein Ref Latent Weight (Legacy)",
-    "Flux2KleinTextRefBalance": "FLUX.2 Klein Text/Ref Balance (Legacy)",
-    "Flux2KleinMaskRefController": "FLUX.2 Klein Mask Ref Controller (Legacy)",
 }
+
+__all__ = [
+    "Flux2ReferenceAttentionControl",
+    "Flux2ReferenceLatentMask",
+    "Flux2ReferenceWeight",
+    "Flux2TextReferenceBalance",
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "_reference_slice",
+]

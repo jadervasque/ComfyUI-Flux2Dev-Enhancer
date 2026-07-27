@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a new capability or a backward-compatible improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues, pull requests, and docs/NODE_REFERENCE.md.
+          required: true
+        - label: The proposal does not depend on restoring removed historical node IDs.
+          required: true
+        - label: I reviewed the project scope in SUPPORT.md.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe the workflow limitation, not only the preferred implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include node placement, inputs, outputs, neutral values, and loader requirements when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration impact
+      description: Explain whether node IDs, sockets, workflows, metadata, VRAM, or performance would change.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Suggested validation
+      description: Describe tests, checkpoints, loaders, fixed seeds, or quality comparisons that would verify the feature.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
