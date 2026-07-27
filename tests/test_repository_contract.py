@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from comfyui_flux2dev_enhancer.constants import PROJECT_NAME, REPOSITORY_URL
 from comfyui_flux2dev_enhancer.registry import NODE_CLASS_MAPPINGS
@@ -18,6 +22,7 @@ FORBIDDEN_RUNTIME_TERMS = (
     "IdentityFeatureTransferV3",
     "KLEIN_LEGACY",
     "legacy_per_block",
+    "klein_sections",
     "ComfyUI-Flux2Klein-Enhancer",
 )
 
