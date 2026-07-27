@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from flux2_enhancer_under_test.flux2_guidance import Flux2IdentityGuidance
+from flux2_enhancer_under_test.flux2_guidance import (
+    Flux2ColorAnchor,
+    Flux2IdentityGuidance,
+)
 from flux2_enhancer_under_test.flux2_identity_nodes import Flux2IdentityFeatureTransfer
 from flux2_enhancer_under_test.flux2_reference_controls import (
     Flux2ReferenceWeight,
@@ -35,3 +38,8 @@ def test_neutral_text_reference_balance_is_loader_independent():
 def test_zero_identity_guidance_is_loader_independent():
     model = CloneOnlyModel()
     assert Flux2IdentityGuidance().apply(model, {}, strength=0.0)[0] is model
+
+
+def test_zero_color_anchor_is_loader_independent():
+    model = CloneOnlyModel()
+    assert Flux2ColorAnchor().apply(model, [], strength=0.0)[0] is model
