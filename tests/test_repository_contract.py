@@ -33,6 +33,11 @@ REMOVED_MODULES = (
     "flux2_sectioned_encoder.py",
     "Flux2klein_Ksampler_exp.py",
     "flux2_identity_nodes.py",
+    "flux2_klein_color_anchor.py",
+    "flux2_klein_mask_ref_controller.py",
+    "flux2_klein_ref_controller.py",
+    "identity_guidance.py",
+    "multi_reference_latent.py",
 )
 
 EXPECTED_EXAMPLES = {
@@ -53,6 +58,11 @@ def test_runtime_package_contains_no_compatibility_code():
 def test_inherited_modules_are_removed():
     for filename in REMOVED_MODULES:
         assert not (ROOT / filename).exists(), filename
+
+
+def test_root_contains_only_the_comfyui_python_entrypoint():
+    root_python_files = {path.name for path in ROOT.glob("*.py")}
+    assert root_python_files == {"__init__.py"}
 
 
 def test_only_maintained_example_workflows_remain():
