@@ -1,4 +1,4 @@
-"""Model-neutral text-conditioning utilities for official FLUX.2 encoders."""
+"""Text-conditioning utilities for official FLUX.2 encoder wrappers."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from typing import Dict, Optional, Tuple
 
 import torch
 
+from .constants import PROJECT_NAME
 
 _SEPARATORS = {"comma": ", ", "period": ". ", "space": " ", "newline": "\n"}
 
@@ -44,7 +45,7 @@ def _parse_marker_sections(text: str) -> Optional[Dict[str, str]]:
 
 
 def _find_tokenizer_adapter(clip):
-    """Return (HF tokenizer, wrapper template, leading special-token count, name)."""
+    """Return the HF tokenizer, wrapper template, leading-token count, and backend."""
 
     root = getattr(clip, "tokenizer", None)
     if root is None:
@@ -122,16 +123,40 @@ class Flux2ConditioningEnhancer:
         return {
             "required": {
                 "conditioning": ("CONDITIONING",),
-                "active_scale": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}),
-                "per_token_whiten": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 5.0, "step": 0.05}),
-                "norm_equalize": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "active_scale": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
+                ),
+                "per_token_whiten": (
+                    "FLOAT",
+                    {"default": 0.0, "min": -1.0, "max": 5.0, "step": 0.05},
+                ),
+                "norm_equalize": (
+                    "FLOAT",
+                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05},
+                ),
             },
             "optional": {
-                "early_layer_scale": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05}),
-                "mid_layer_scale": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05}),
-                "late_layer_scale": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05}),
-                "preserve_original": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "active_end_override": ("INT", {"default": 0, "min": 0, "max": 8192}),
+                "early_layer_scale": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05},
+                ),
+                "mid_layer_scale": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05},
+                ),
+                "late_layer_scale": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.05},
+                ),
+                "preserve_original": (
+                    "FLOAT",
+                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05},
+                ),
+                "active_end_override": (
+                    "INT",
+                    {"default": 0, "min": 0, "max": 8192},
+                ),
                 "debug": ("BOOLEAN", {"default": False}),
             },
         }
@@ -200,8 +225,9 @@ class Flux2ConditioningEnhancer:
             output.append([value.to(dtype=original_dtype), dict(meta)])
             if debug:
                 print(
-                    f"[Flux2ConditioningEnhancer] item={item_index} shape={tuple(tensor.shape)} "
-                    f"active_end={end} three_slices={slices is not None}"
+                    f"[{PROJECT_NAME}:ConditioningEnhancer] item={item_index} "
+                    f"shape={tuple(tensor.shape)} active_end={end} "
+                    f"three_slices={slices is not None}"
                 )
         return (output,)
 
@@ -212,11 +238,20 @@ class Flux2TextConditioningEnhancer:
         return {
             "required": {
                 "conditioning": ("CONDITIONING",),
-                "magnitude": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 3.0, "step": 0.05}),
+                "magnitude": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 3.0, "step": 0.05},
+                ),
             },
             "optional": {
-                "contrast": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 2.0, "step": 0.05}),
-                "normalize_strength": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "contrast": (
+                    "FLOAT",
+                    {"default": 0.0, "min": -1.0, "max": 2.0, "step": 0.05},
+                ),
+                "normalize_strength": (
+                    "FLOAT",
+                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05},
+                ),
                 "skip_first_token": ("BOOLEAN", {"default": True}),
                 "debug": ("BOOLEAN", {"default": False}),
             },
@@ -226,9 +261,18 @@ class Flux2TextConditioningEnhancer:
     FUNCTION = "enhance"
     CATEGORY = "conditioning/flux2"
 
-    def enhance(self, conditioning, magnitude=1.0, contrast=0.0,
-                normalize_strength=0.0, skip_first_token=True, debug=False):
-        if not conditioning or (magnitude == 1.0 and contrast == 0.0 and normalize_strength == 0.0):
+    def enhance(
+        self,
+        conditioning,
+        magnitude=1.0,
+        contrast=0.0,
+        normalize_strength=0.0,
+        skip_first_token=True,
+        debug=False,
+    ):
+        if not conditioning or (
+            magnitude == 1.0 and contrast == 0.0 and normalize_strength == 0.0
+        ):
             return (conditioning,)
         output = []
         for item_index, (tensor, meta) in enumerate(conditioning):
@@ -244,7 +288,10 @@ class Flux2TextConditioningEnhancer:
                     norms = active.norm(dim=-1, keepdim=True).clamp(min=1e-8)
                     target = norms.mean(dim=1, keepdim=True)
                     normalized = active / norms * target
-                    active = active * (1.0 - normalize_strength) + normalized * normalize_strength
+                    active = (
+                        active * (1.0 - normalize_strength)
+                        + normalized * normalize_strength
+                    )
                 if contrast != 0.0:
                     mean = active.mean(dim=1, keepdim=True)
                     scale = 1.0 + contrast if contrast >= 0 else math.exp(contrast)
@@ -254,7 +301,10 @@ class Flux2TextConditioningEnhancer:
                 value[:, start:end] = active
             output.append([value.to(dtype=tensor.dtype), dict(meta)])
             if debug:
-                print(f"[Flux2TextConditioningEnhancer] item={item_index} active={start}:{end}")
+                print(
+                    f"[{PROJECT_NAME}:TextConditioningEnhancer] "
+                    f"item={item_index} active={start}:{end}"
+                )
         return (output,)
 
 
@@ -275,13 +325,28 @@ class Flux2SectionedEncoder:
         }
 
     RETURN_TYPES = ("CONDITIONING", "STRING", "STRING", "STRING", "STRING")
-    RETURN_NAMES = ("conditioning", "front_section", "mid_section", "end_section", "full_prompt")
+    RETURN_NAMES = (
+        "conditioning",
+        "front_section",
+        "mid_section",
+        "end_section",
+        "full_prompt",
+    )
     FUNCTION = "encode_sectioned"
     CATEGORY = "conditioning/flux2"
     OUTPUT_NODE = True
 
-    def encode_sectioned(self, clip, front_text="", mid_text="", end_text="",
-                         combined_prompt="", separator="comma", show_preview=True, debug=False):
+    def encode_sectioned(
+        self,
+        clip,
+        front_text="",
+        mid_text="",
+        end_text="",
+        combined_prompt="",
+        separator="comma",
+        show_preview=True,
+        debug=False,
+    ):
         sections = _parse_marker_sections(combined_prompt) or {
             "front": front_text or "",
             "mid": mid_text or "",
@@ -298,15 +363,25 @@ class Flux2SectionedEncoder:
             add_dict["flux2_sections"] = ranges
         conditioning = clip.encode_from_tokens_scheduled(tokens, add_dict=add_dict)
         if show_preview or debug:
-            print("\n".join([
-                "=" * 70,
-                "FLUX.2 Sectioned Encoding",
-                f"Tokenizer backend: {backend}",
-                f"Ranges: {ranges if ranges is not None else 'unavailable'}",
-                f"Prompt: {full_prompt!r}",
-                "=" * 70,
-            ]))
-        return conditioning, sections["front"], sections["mid"], sections["end"], full_prompt
+            print(
+                "\n".join(
+                    [
+                        "=" * 70,
+                        f"{PROJECT_NAME} — FLUX.2 Sectioned Encoding",
+                        f"Tokenizer backend: {backend}",
+                        f"Ranges: {ranges if ranges is not None else 'unavailable'}",
+                        f"Prompt: {full_prompt!r}",
+                        "=" * 70,
+                    ]
+                )
+            )
+        return (
+            conditioning,
+            sections["front"],
+            sections["mid"],
+            sections["end"],
+            full_prompt,
+        )
 
 
 class Flux2DetailController:
@@ -315,14 +390,32 @@ class Flux2DetailController:
         return {
             "required": {"conditioning": ("CONDITIONING",)},
             "optional": {
-                "front_mult": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}),
-                "mid_mult": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}),
-                "end_mult": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05}),
+                "front_mult": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
+                ),
+                "mid_mult": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
+                ),
+                "end_mult": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.05},
+                ),
                 "emphasis_start": ("INT", {"default": 0, "min": 0, "max": 8192}),
                 "emphasis_end": ("INT", {"default": 0, "min": 0, "max": 8192}),
-                "emphasis_mult": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.1}),
-                "preserve_original": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05}),
-                "fallback_mode": (["relative_sections", "no_op"], {"default": "relative_sections"}),
+                "emphasis_mult": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 10.0, "step": 0.1},
+                ),
+                "preserve_original": (
+                    "FLOAT",
+                    {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.05},
+                ),
+                "fallback_mode": (
+                    ["relative_sections", "no_op"],
+                    {"default": "relative_sections"},
+                ),
                 "debug": ("BOOLEAN", {"default": False}),
             },
         }
@@ -331,9 +424,19 @@ class Flux2DetailController:
     FUNCTION = "control"
     CATEGORY = "conditioning/flux2"
 
-    def control(self, conditioning, front_mult=1.0, mid_mult=1.0, end_mult=1.0,
-                emphasis_start=0, emphasis_end=0, emphasis_mult=1.0,
-                preserve_original=0.0, fallback_mode="relative_sections", debug=False):
+    def control(
+        self,
+        conditioning,
+        front_mult=1.0,
+        mid_mult=1.0,
+        end_mult=1.0,
+        emphasis_start=0,
+        emphasis_end=0,
+        emphasis_mult=1.0,
+        preserve_original=0.0,
+        fallback_mode="relative_sections",
+        debug=False,
+    ):
         neutral = (
             front_mult == mid_mult == end_mult == 1.0
             and (emphasis_end <= emphasis_start or emphasis_mult == 1.0)
@@ -349,7 +452,7 @@ class Flux2DetailController:
             value = tensor.float().clone()
             original = value.clone()
             end = _active_end(meta, value.shape[1])
-            ranges = meta.get("flux2_sections") or meta.get("klein_sections")
+            ranges = meta.get("flux2_sections")
             source = "metadata"
             if not ranges:
                 if fallback_mode == "no_op":
@@ -357,9 +460,17 @@ class Flux2DetailController:
                     continue
                 first = int(end * 0.25)
                 second = int(end * 0.75)
-                ranges = {"front": (0, first), "mid": (first, second), "end": (second, end)}
+                ranges = {
+                    "front": (0, first),
+                    "mid": (first, second),
+                    "end": (second, end),
+                }
                 source = "relative fallback"
-            for key, multiplier in (("front", front_mult), ("mid", mid_mult), ("end", end_mult)):
+            for key, multiplier in (
+                ("front", front_mult),
+                ("mid", mid_mult),
+                ("end", end_mult),
+            ):
                 if key not in ranges or multiplier == 1.0:
                     continue
                 start_idx, stop_idx = ranges[key]
@@ -374,7 +485,10 @@ class Flux2DetailController:
                 value = value * (1.0 - preserve_original) + original * preserve_original
             output.append([value.to(dtype=tensor.dtype), dict(meta)])
             if debug:
-                print(f"[Flux2DetailController] item={item_index} source={source} ranges={ranges}")
+                print(
+                    f"[{PROJECT_NAME}:DetailController] item={item_index} "
+                    f"source={source} ranges={ranges}"
+                )
         return (output,)
 
 
@@ -391,3 +505,14 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Flux2SectionedEncoder": "FLUX.2 Sectioned Encoder",
     "Flux2DetailController": "FLUX.2 Detail Controller",
 }
+
+__all__ = [
+    "Flux2ConditioningEnhancer",
+    "Flux2DetailController",
+    "Flux2SectionedEncoder",
+    "Flux2TextConditioningEnhancer",
+    "NODE_CLASS_MAPPINGS",
+    "NODE_DISPLAY_NAME_MAPPINGS",
+    "_active_end",
+    "_compute_section_ranges",
+]
