@@ -17,7 +17,7 @@ from .flux2_guidance import (
     NODE_CLASS_MAPPINGS as GUIDANCE_NODES,
     NODE_DISPLAY_NAME_MAPPINGS as GUIDANCE_NAMES,
 )
-from .flux2_identity_transfer import (
+from .flux2_identity_nodes import (
     NODE_CLASS_MAPPINGS as IDENTITY_NODES,
     NODE_DISPLAY_NAME_MAPPINGS as IDENTITY_NAMES,
 )
