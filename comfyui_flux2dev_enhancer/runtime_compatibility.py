@@ -42,7 +42,18 @@ def install_flux_forward_runtime_guard(flux_class: Any = None) -> bool:
         # Inspect the effective method at call time. This intentionally happens on
         # every call because another custom node may replace ``forward_orig`` after
         # this package has already been imported.
-        ensure_forward_orig_compatibility(self)
+        if ensure_forward_orig_compatibility(self):
+            replacement = getattr(self, "forward_orig", None)
+            wrapped = getattr(replacement, "__wrapped__", None)
+            replacement_name = getattr(
+                wrapped or replacement,
+                "__name__",
+                type(wrapped or replacement).__name__,
+            )
+            print(
+                "[ComfyUI-Flux2Dev-Enhancer] Adapted outdated external "
+                f"Flux.forward_orig replacement: {replacement_name}"
+            )
         return current_forward(self, *args, **kwargs)
 
     setattr(guarded_forward, _RUNTIME_GUARD_MARKER, True)
